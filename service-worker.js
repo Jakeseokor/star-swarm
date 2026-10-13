@@ -1,6 +1,6 @@
 'use strict';
 /* 오프라인 캐시. 게임 파일을 고치면 CACHE 버전 숫자를 올려야 아이패드에 새 버전이 반영됩니다. */
-const CACHE = 'star-swarm-v1';
+const CACHE = 'star-swarm-v2';
 const ASSETS = [
   './',
   './index.html',

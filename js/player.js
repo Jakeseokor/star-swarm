@@ -34,6 +34,7 @@
     resetFull() {
       this.x = C.WIDTH / 2;
       this.y = P.y;
+      this.vy = 0;
       this.alive = true;
       this.invuln = P.invulnTime;
       this.cool = 0.4;
@@ -45,6 +46,7 @@
 
     respawn() {
       this.x = C.WIDTH / 2;
+      this.y = P.y;
       this.alive = true;
       this.invuln = P.invulnTime;
       this.cool = 0.3;
@@ -74,10 +76,15 @@
       const drag = inp.takeDrag(); // 죽어 있어도 누적분은 버림
       if (!this.alive) return;
 
-      let dx = drag;
+      let dx = drag.x, dy = drag.y;
       if (inp.keys.left) dx -= P.speed * dt;
       if (inp.keys.right) dx += P.speed * dt;
+      if (inp.keys.up) dy -= P.vSpeed * dt;   // 전진
+      if (inp.keys.down) dy += P.vSpeed * dt; // 후진
       this.x = clamp(this.x + dx, P.margin, C.WIDTH - P.margin);
+      const oldY = this.y;
+      this.y = clamp(this.y + dy, P.minY, P.maxY);
+      this.vy = dt > 0 ? (this.y - oldY) / dt : 0;
 
       if (!canFire) return;
       const auto = this.game.save.fireMode === 'auto';
@@ -103,11 +110,12 @@
       const blinkOff = this.invuln > 0 && Math.floor(time * 16) % 2 === 0;
 
       if (!blinkOff) {
-        // 엔진 불꽃
+        // 엔진 불꽃 (전진 중엔 길게, 후진 중엔 짧게)
         const f = Math.floor(time * 30) % 3;
+        const len = 3 + f + (this.vy < -20 ? 5 : this.vy > 20 ? -2 : 0);
         ctx.fillStyle = f === 0 ? '#ffe14a' : '#ff8a2e';
-        ctx.fillRect(x - 7, y + 12, 2, 3 + f);
-        ctx.fillRect(x + 5, y + 12, 2, 3 + f);
+        ctx.fillRect(x - 7, y + 12, 2, len);
+        ctx.fillRect(x + 5, y + 12, 2, len);
         ctx.drawImage(this.sprite, x - 13, y - 12);
       }
 

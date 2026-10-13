@@ -18,8 +18,11 @@ SS.CONFIG = {
   LOOP_SPEED_MULT: 1.3,        // 2회차 속도 배율 (3회차 = 1.3², ...)
 
   PLAYER: {
-    y: 588,                    // 기체 높이(고정)
-    speed: 300,                // 키보드 이동 속도 (px/s)
+    y: 588,                    // 기체 시작 높이
+    minY: 400,                 // 전진 한계 (위로 올라갈 수 있는 최대 높이)
+    maxY: 604,                 // 후진 한계
+    speed: 300,                // 키보드 좌우 이동 속도 (px/s)
+    vSpeed: 240,               // 키보드 전진·후진 속도 (px/s)
     dragSensitivity: 1.15,     // 터치 드래그 감도 (손가락 이동량 대비)
     margin: 18,
     fireCooldown: 0.30,        // 기본 연사 간격(초)
@@ -32,6 +35,16 @@ SS.CONFIG = {
     hitRadius: 6,              // 피격 판정 반경 (작을수록 관대)
   },
 
+  BOMB: {
+    start: 3,                  // 시작 시 보유 폭탄
+    minAfterDeath: 2,          // 기체를 잃으면 최소 이만큼은 다시 채워 줌
+    max: 5,
+    radius: 300,               // 충격파 최대 반경 (px)
+    duration: 0.6,             // 충격파가 퍼지는 시간 (초)
+    bossDamage: 5,             // 보스에게 주는 피해
+    invuln: 1.0,               // 사용 직후 무적 시간
+  },
+
   POWERUP: {
     dropChance: 0.07,          // 격추 시 드롭 확률
     divingDropBonus: 0.06,     // 급강하 중인 적 격추 시 추가 확률
@@ -39,7 +52,7 @@ SS.CONFIG = {
     fallSpeed: 85,
     doubleTime: 18,            // 2연발 지속시간(초)
     rapidTime: 14,             // 속사 지속시간(초)
-    weights: { double: 4, shield: 3, rapid: 4 },
+    weights: { double: 4, shield: 3, rapid: 4, bomb: 2 },  // bomb = 폭탄 +1
   },
 
   SCORE: {

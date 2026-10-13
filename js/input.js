@@ -7,20 +7,26 @@
   const KEYMAP = {
     ArrowLeft: 'left', KeyA: 'left',
     ArrowRight: 'right', KeyD: 'right',
+    ArrowUp: 'up', KeyW: 'up',
+    ArrowDown: 'down', KeyS: 'down',
     Space: 'fire', KeyZ: 'fire',
   };
   const BLOCK_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Tab'];
 
   const Input = {
-    keys: { left: false, right: false, fire: false },
+    keys: { left: false, right: false, up: false, down: false, fire: false },
     pressed: [],          // 이번 프레임에 새로 눌린 키 코드
     taps: [],             // 이번 프레임의 터치 시작 지점 (게임 좌표)
     dragId: null,
     dragLastX: 0,
+    dragLastY: 0,
     dragDX: 0,            // 다음 프레임에 기체가 이동할 누적량 (게임 좌표)
+    dragDY: 0,
     fireId: null,
     fireHeld: false,
     fireButton: null,     // 수동 발사 모드일 때 {x, y, r}
+    bombButton: null,     // 게임 중일 때 {x, y, r}
+    bombPressed: false,   // 이번 프레임에 폭탄 버튼/키가 눌렸는지
     usedKeyboard: false,
     canvas: null,
 
@@ -57,10 +63,10 @@
     },
 
     reset() {
-      this.keys.left = this.keys.right = this.keys.fire = false;
+      this.keys.left = this.keys.right = this.keys.up = this.keys.down = this.keys.fire = false;
       this.dragId = this.fireId = null;
       this.fireHeld = false;
-      this.dragDX = 0;
+      this.dragDX = this.dragDY = 0;
     },
 
     toGame(cx, cy) {
@@ -79,11 +85,23 @@
       return dx * dx + dy * dy <= r * r;
     },
 
+    inBombButton(p) {
+      const b = this.bombButton;
+      if (!b) return false;
+      if (p.x < 0) return true; // 가로 모드: 왼쪽 레터박스 영역 전체가 폭탄 버튼
+      const dx = p.x - b.x, dy = p.y - b.y, r = b.r + 8;
+      return dx * dx + dy * dy <= r * r;
+    },
+
     onDown(e) {
       e.preventDefault();
       SS.Audio.unlock();
       const p = this.toGame(e.clientX, e.clientY);
       this.taps.push(p);
+      if (this.inBombButton(p)) {
+        this.bombPressed = true;
+        return;
+      }
       if (this.inFireButton(p)) {
         this.fireId = e.pointerId;
         this.fireHeld = true;
@@ -92,6 +110,7 @@
       if (this.dragId === null) {
         this.dragId = e.pointerId;
         this.dragLastX = p.x;
+        this.dragLastY = p.y;
       }
     },
 
@@ -100,7 +119,9 @@
       e.preventDefault();
       const p = this.toGame(e.clientX, e.clientY);
       this.dragDX += (p.x - this.dragLastX) * C.PLAYER.dragSensitivity;
+      this.dragDY += (p.y - this.dragLastY) * C.PLAYER.dragSensitivity;
       this.dragLastX = p.x;
+      this.dragLastY = p.y;
     },
 
     onUp(e) {
@@ -111,9 +132,10 @@
       }
     },
 
+    // 누적된 드래그 이동량 {x, y}를 꺼내고 0으로 초기화
     takeDrag() {
-      const d = this.dragDX;
-      this.dragDX = 0;
+      const d = { x: this.dragDX, y: this.dragDY };
+      this.dragDX = this.dragDY = 0;
       return d;
     },
 
@@ -124,6 +146,7 @@
     endFrame() {
       this.pressed.length = 0;
       this.taps.length = 0;
+      this.bombPressed = false;
     },
   };
 

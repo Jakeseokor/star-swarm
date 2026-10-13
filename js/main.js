@@ -7,7 +7,7 @@
 
   function rand(a, b) { return a + Math.random() * (b - a); }
 
-  const DEFAULT_SAVE = { hi: 0, unlocked: 1, sound: true, fireMode: 'auto', cleared: false };
+  const DEFAULT_SAVE = { hi: 0, unlocked: 1, sound: true, music: true, fireMode: 'auto', cleared: false };
 
   function loadSave() {
     try {
@@ -32,6 +32,7 @@
       this.wrap = document.getElementById('wrap');
       this.save = loadSave();
       SS.Audio.setEnabled(this.save.sound);
+      SS.Audio.setMusicEnabled(this.save.music);
       SS.Input.init(this.canvas);
 
       this.ui = new SS.UI(this);
@@ -48,6 +49,9 @@
       this.shake = 0;
       this.score = 0;
       this.lives = C.START_LIVES;
+      this.bombs = C.BOMB.start;
+      this.bombWave = null;
+      this.flash = 0;
       this.nextExtra = C.EXTRA_LIFE_EVERY;
       this.loop = 1;
       this.speedMul = 1;
@@ -125,6 +129,12 @@
       this.persist();
     }
 
+    toggleMusic() {
+      this.save.music = !this.save.music;
+      SS.Audio.setMusicEnabled(this.save.music);
+      this.persist();
+    }
+
     toggleFireMode() {
       this.save.fireMode = this.save.fireMode === 'auto' ? 'manual' : 'auto';
       this.persist();
@@ -142,6 +152,7 @@
       this.state = state;
       this.stateTime = 0;
       SS.Input.fireButton = state === 'playing' && this.save.fireMode === 'manual' ? SS.UI.FIRE_BTN : null;
+      SS.Input.bombButton = state === 'playing' ? SS.UI.BOMB_BTN : null;
     }
 
     startGame(stageNum) {
@@ -149,6 +160,7 @@
       this.speedMul = 1;
       this.score = 0;
       this.lives = C.START_LIVES;
+      this.bombs = C.BOMB.start;
       this.nextExtra = C.EXTRA_LIFE_EVERY;
       this.runStartHi = this.save.hi;
       this.newRecord = false;
@@ -163,6 +175,8 @@
       this.eBullets.length = 0;
       this.powerups.length = 0;
       this.popups.length = 0;
+      this.bombWave = null;
+      this.flash = 0;
       this.player.resetFull();
       this.deaths = 0;
       this.shots = 0;
@@ -291,6 +305,9 @@
       this.time += dt;
       this.stateTime += dt;
       if (this.shake > 0) this.shake = Math.max(0, this.shake - dt);
+      if (this.flash > 0) this.flash = Math.max(0, this.flash - dt);
+      SS.Audio.setMusic(this.musicFor());
+      SS.Audio.updateMusic();
 
       const warp = this.state === 'playing' && this.stageIntro > 0 ? 3 : this.state === 'paused' ? 0 : 1;
       for (const s of this.stars) {
@@ -312,10 +329,67 @@
       }
     }
 
+    // 화면 상태에 맞는 배경음악
+    musicFor() {
+      switch (this.state) {
+        case 'title': case 'select': case 'settings': case 'ending':
+          return 'title';
+        case 'playing': {
+          if (this.stageIntro > 0.6 || !this.player.alive && this.lives <= 0) return null; // 시작 징글 중 / 게임오버 직전
+          const st = this.stage;
+          return st && (st.warningStarted || st.bossSpawned) && !(st.boss && st.boss.dead) ? 'boss' : 'stage';
+        }
+        default:
+          return null; // 일시정지·클리어·게임오버: 정지
+      }
+    }
+
+    // ---------------- 폭탄 ----------------
+    useBomb() {
+      const p = this.player;
+      if (!p.alive || this.bombWave || this.stageIntro > 0) return;
+      if (this.bombs <= 0) { SS.Audio.play('bombEmpty'); return; }
+      this.bombs--;
+      this.bombWave = { x: p.x, y: p.y, t: 0, r: 0 };
+      p.invuln = Math.max(p.invuln, C.BOMB.invuln);
+      this.flash = 0.35;
+      this.shake = 0.6;
+      this.clearEnemyBullets();
+      const boss = this.stage.boss;
+      if (boss && !boss.dead && boss.state === 'fight' && boss.invuln <= 0) {
+        if (boss.hit(C.BOMB.bossDamage) === 'kill') this.onBossKilled(boss);
+      }
+      SS.Audio.play('bomb');
+    }
+
+    updateBomb(dt) {
+      const w = this.bombWave;
+      if (!w) return;
+      w.t += dt;
+      w.r = C.BOMB.radius * Math.min(1, w.t / C.BOMB.duration);
+      const r2 = w.r * w.r;
+      for (const e of this.stage.enemies) {
+        if (!e.active || e.y < -10) continue;
+        const dx = e.x - w.x, dy = e.y - w.y;
+        if (dx * dx + dy * dy < r2) {
+          e.hp = 1;
+          e.hit();
+          this.onEnemyKilled(e);
+        }
+      }
+      for (let i = this.eBullets.length - 1; i >= 0; i--) {
+        const b = this.eBullets[i], dx = b.x - w.x, dy = b.y - w.y;
+        if (dx * dx + dy * dy < r2) this.eBullets.splice(i, 1);
+      }
+      if (w.t >= C.BOMB.duration + 0.25) this.bombWave = null;
+    }
+
     updatePlaying(dt) {
       const p = this.player;
       if (this.stageIntro > 0) this.stageIntro -= dt;
       this.stage.update(dt);
+      if (SS.Input.bombPressed || SS.Input.wasPressed('KeyX', 'KeyB')) this.useBomb();
+      this.updateBomb(dt);
 
       const before = this.pBullets.length;
       p.update(dt, true);
@@ -376,10 +450,10 @@
 
     dropPowerup(x, y) {
       const w = C.POWERUP.weights;
-      const total = w.double + w.shield + w.rapid;
+      const total = w.double + w.shield + w.rapid + w.bomb;
       let r = Math.random() * total;
       let type = 'double';
-      for (const k of ['double', 'shield', 'rapid']) { if ((r -= w[k]) < 0) { type = k; break; } }
+      for (const k of ['double', 'shield', 'rapid', 'bomb']) { if ((r -= w[k]) < 0) { type = k; break; } }
       this.powerups.push({ x, y, type, t: 0 });
     }
 
@@ -389,6 +463,12 @@
       if (type === 'rapid') { p.rapid = P.rapidTime; this.popup(p.x, p.y - 30, 'RAPID!', '#ff5ad1'); }
       if (type === 'shield') { p.shield = true; this.popup(p.x, p.y - 30, 'SHIELD!', '#4ff0ff'); }
       this.addScore(100);
+      if (type === 'bomb') {
+        this.bombs = Math.min(C.BOMB.max, this.bombs + 1);
+        this.popup(p.x, p.y - 30, 'BOMB +1', '#ff8a2e');
+        SS.Audio.play('bombGet');
+        return;
+      }
       SS.Audio.play('powerup');
     }
 
@@ -418,12 +498,7 @@
           else {
             this.hits++;
             this.explode(b.x, b.y, ['#ffe14a', '#ffffff'], 4, 90, 0.25);
-            if (r === 'kill') {
-              this.addScore(C.SCORE.boss);
-              this.popup(boss.x, boss.y + 30, C.SCORE.boss, '#ffd23a');
-              this.clearEnemyBullets();
-              SS.Audio.play('bossDie');
-            }
+            if (r === 'kill') this.onBossKilled(boss);
           }
         }
         if (used) this.pBullets.splice(i, 1);
@@ -454,6 +529,13 @@
       }
     }
 
+    onBossKilled(boss) {
+      this.addScore(C.SCORE.boss);
+      this.popup(boss.x, boss.y + 30, C.SCORE.boss, '#ffd23a');
+      this.clearEnemyBullets();
+      SS.Audio.play('bossDie');
+    }
+
     onEnemyKilled(e) {
       const diving = e.state !== 'formation';
       const pts = C.SCORE[e.type][diving ? 'diving' : 'formation'];
@@ -477,6 +559,7 @@
       }
       p.die();
       this.lives--;
+      this.bombs = Math.max(this.bombs, C.BOMB.minAfterDeath);
       this.deaths++;
       this.shake = 0.5;
       this.explode(p.x, p.y, ['#ffffff', '#ff3b4e', '#ffe14a', '#3a7bff'], 40, 200, 1.0);
@@ -504,6 +587,11 @@
       if (this.stage && WORLD_STATES.includes(this.state)) this.drawWorld(ctx);
       ctx.restore();
 
+      if (this.flash > 0) {
+        ctx.fillStyle = `rgba(255, 240, 210, ${Math.min(0.75, this.flash * 2.2)})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+
       this.ui.draw(ctx);
 
       if (this.showFps) SS.Gfx.text(ctx, Math.round(this.fps) + 'FPS', 4, H - 34, { size: 1, color: '#38d86b' });
@@ -523,6 +611,21 @@
         ctx.fillStyle = '#10102a';
         ctx.fillRect(x - 5, y - 5, 10, 10);
         SS.Gfx.text(ctx, SS.UI.PU_LETTER[u.type], x - 2, y - 3, { size: 1, color: c });
+      }
+
+      const w = this.bombWave;
+      if (w) {
+        const fade = Math.max(0, 1 - w.t / (C.BOMB.duration + 0.25));
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = `rgba(255, 138, 46, ${fade})`;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${fade})`;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, Math.max(0, w.r - 10), 0, Math.PI * 2);
+        ctx.stroke();
       }
 
       SS.Bullet.drawPlayer(ctx, this.pBullets);
