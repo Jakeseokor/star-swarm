@@ -11,7 +11,7 @@
 (function () {
   const SS = window.SS;
   const MASTER = 0.4;
-  const MUSIC_VOL = 0.3;
+  const MUSIC_VOL = 0.42;
 
   let ctx = null, master = null, musicBus = null, noiseBuf = null;
   let enabled = true, musicOn = true, primed = false;
@@ -184,114 +184,277 @@
   };
 
 
-  // ---------------- 배경음악 (오리지널 전투 칩튠) ----------------
-  // 16분음표 단위. 숫자 = MIDI 음 번호, 0 = 쉼표
-  // 전투 긴장도(intensity 0~1)가 오르면 아르페지오·16비트 하이햇·상승 효과음 레이어가 더해진다.
+  // ---------------- 배경음악: K-pop 스타일 오리지널 전투곡 ----------------
+  // 구성: 인트로 → 벌스 → 프리코러스(빌드업) → 드롭(후렴) 반복. 킥에 맞춘 사이드체인, 슈퍼소우 리드,
+  // 808 베이스, 클랩·하이햇, 크래시·상승음. 모든 멜로디는 직접 작곡한 것.
   const mf = (n) => 440 * Math.pow(2, (n - 69) / 12);
-  const rep = (arr, n) => [].concat(...Array(n).fill(arr));
-  function bars(roots, pat) { return [].concat(...roots.map((r) => pat.map((o) => (o === null ? 0 : r + o)))); }
-  function arps(chords) { return [].concat(...chords.map((c) => rep(c, 4))); }
-  const GALLOP = [0, 0, 12, 0, 0, 0, 12, 0, 0, 0, 12, 0, 0, 12, 0, 12]; // 쉼 없이 몰아치는 16비트 베이스
-  const STOMP = [0, 0, 12, 0, 1, 0, 12, 0, 0, 0, 12, 0, 3, 0, 1, 0];   // 반음 충돌로 불안감
-  const PULSE8 = [0, null, 0, null, 0, null, 0, null, 0, null, 0, null, 0, null, 7, null];
+  let duck = null; // 사이드체인 버스 (킥이 칠 때 화성 악기 볼륨이 출렁임)
+
+  function ensureBus() {
+    if (!duck) { duck = ctx.createGain(); duck.connect(musicBus); }
+    return duck;
+  }
+  function env(g, t, vol, a, hold, rel) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + a);
+    g.gain.setValueAtTime(vol, t + a + hold);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + a + hold + rel);
+  }
+  // 슈퍼소우: 디튠한 톱니파 3개 + 필터
+  function supersaw(n, t, dur, vol, cutoff) {
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.Q.value = 1.5;
+    f.frequency.setValueAtTime(cutoff * 2.2, t);
+    f.frequency.exponentialRampToValueAtTime(cutoff, t + Math.min(0.3, dur));
+    const g = ctx.createGain();
+    env(g, t, vol, 0.01, Math.max(0.01, dur * 0.75), dur * 0.35 + 0.05);
+    for (const d of [-14, 0, 14]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = mf(n); o.detune.value = d;
+      o.connect(f); o.start(t); o.stop(t + dur * 1.2 + 0.1);
+    }
+    f.connect(g); g.connect(ensureBus());
+  }
+  function pluck(n, t, vol, dec) {
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.frequency.setValueAtTime(5200, t); f.frequency.exponentialRampToValueAtTime(700, t + (dec || 0.18));
+    const g = ctx.createGain();
+    env(g, t, vol, 0.004, 0.01, dec || 0.2);
+    const o = ctx.createOscillator();
+    o.type = 'square'; o.frequency.value = mf(n);
+    o.connect(f); f.connect(g); g.connect(ensureBus());
+    o.start(t); o.stop(t + (dec || 0.2) + 0.05);
+  }
+  function pad(notes, t, dur, vol) {
+    for (const n of notes) {
+      const g = ctx.createGain();
+      env(g, t, vol, Math.min(0.25, dur * 0.3), dur * 0.5, dur * 0.3);
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 1800;
+      for (const [type, d] of [['sawtooth', -8], ['triangle', 8]]) {
+        const o = ctx.createOscillator();
+        o.type = type; o.frequency.value = mf(n); o.detune.value = d;
+        o.connect(f); o.start(t); o.stop(t + dur + 0.1);
+      }
+      f.connect(g); g.connect(ensureBus());
+    }
+  }
+  function stab(notes, t, vol) { // 브라스 스탭
+    for (const n of notes) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass'; f.Q.value = 3; f.frequency.setValueAtTime(3500, t); f.frequency.exponentialRampToValueAtTime(600, t + 0.16);
+      const g = ctx.createGain(); env(g, t, vol, 0.005, 0.05, 0.12);
+      for (const d of [-10, 10]) {
+        const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mf(n); o.detune.value = d;
+        o.connect(f); o.start(t); o.stop(t + 0.25);
+      }
+      f.connect(g); g.connect(ensureBus());
+    }
+  }
+  function bass808(n, t, dur, vol, from) {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(mf(from || n), t);
+    if (from) o.frequency.exponentialRampToValueAtTime(mf(n), t + 0.09);
+    const g = ctx.createGain(); env(g, t, vol, 0.005, Math.max(0.01, dur * 0.7), dur * 0.3 + 0.05);
+    const o2 = ctx.createOscillator(); // 배음 (작은 스피커에서도 들리게)
+    o2.type = 'triangle'; o2.frequency.value = mf(n + 12);
+    const g2 = ctx.createGain(); env(g2, t, vol * 0.35, 0.005, dur * 0.4, 0.08);
+    o.connect(g); o2.connect(g2); g.connect(ensureBus()); g2.connect(ensureBus());
+    o.start(t); o.stop(t + dur + 0.1); o2.start(t); o2.stop(t + dur + 0.1);
+  }
+  function kick(t, vol, side) {
+    toneAt(musicBus, 'sine', 165, 42, t, 0.24, vol);
+    noiseAt(musicBus, t, 0.012, vol * 0.4, 6000, 2000);
+    if (side) { const b = ensureBus(); b.gain.setValueAtTime(0.35, t); b.gain.linearRampToValueAtTime(1, t + 0.22); }
+  }
+  function clap(t, vol) {
+    for (let i = 0; i < 3; i++) noiseAt(musicBus, t + i * 0.011, 0.02, vol, 2400, 1100, 'bandpass');
+    noiseAt(musicBus, t + 0.033, 0.16, vol * 0.7, 2200, 900, 'bandpass');
+  }
+  function snare(t, vol) { noiseAt(musicBus, t, 0.12, vol, 7000, 1600); toneAt(musicBus, 'triangle', 230, 140, t, 0.06, vol * 0.5); }
+  function hat(t, vol, open) { noiseAt(musicBus, t, open ? 0.18 : 0.03, vol, 8000, 10000, 'highpass'); }
+  function crash(t) { noiseAt(musicBus, t, 1.6, 0.14, 9000, 5000, 'highpass'); }
+  function riser(t, dur, vol) {
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 2;
+    f.frequency.setValueAtTime(300, t); f.frequency.exponentialRampToValueAtTime(9000, t + dur);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + dur);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.05);
+    s.connect(f); f.connect(g); g.connect(musicBus); s.start(t); s.stop(t + dur + 0.1);
+  }
+  // 멜로디: [시작 16분음표(0~63), 음, 길이(16분음표)] → 빠른 조회용 맵
+  const phrase = (ev) => { const m = {}; for (const [st, n, l] of ev) m[st] = [n, l]; return m; };
+
+  // 화성 (E단조: Em – C – G – D)
+  const EM = [64, 67, 71], CM = [60, 64, 67], GM = [62, 67, 71], DM = [62, 66, 69];
+  const PROG = [EM, CM, GM, DM], ROOT = [40, 36, 43, 38];
+
+  // 후렴 훅 (A·B 프레이즈)
+  const HOOK_A = phrase([[0, 76, 2], [3, 76, 1], [4, 79, 2], [6, 78, 2], [8, 76, 2], [11, 74, 1], [12, 76, 4],
+    [16, 79, 2], [19, 79, 1], [20, 81, 2], [22, 79, 2], [24, 76, 2], [27, 74, 1], [28, 72, 4],
+    [32, 71, 2], [35, 74, 1], [36, 79, 2], [38, 78, 2], [40, 79, 2], [43, 81, 1], [44, 83, 4],
+    [48, 81, 2], [50, 79, 2], [52, 78, 2], [54, 76, 2], [56, 78, 3], [59, 74, 1], [60, 78, 4]]);
+  const HOOK_B = phrase([[0, 76, 2], [3, 76, 1], [4, 79, 2], [6, 78, 2], [8, 76, 2], [11, 74, 1], [12, 76, 4],
+    [16, 79, 2], [19, 79, 1], [20, 81, 2], [22, 79, 2], [24, 76, 2], [27, 74, 1], [28, 72, 4],
+    [32, 83, 3], [35, 81, 1], [36, 79, 2], [38, 81, 2], [40, 83, 4], [44, 86, 4],
+    [48, 81, 4], [52, 78, 2], [54, 81, 2], [56, 76, 8]]);
+  const VERSE = phrase([[0, 71, 1], [2, 71, 1], [4, 76, 2], [7, 74, 1], [8, 71, 2], [12, 67, 2],
+    [16, 72, 1], [18, 72, 1], [20, 76, 2], [23, 74, 1], [24, 72, 2], [28, 67, 2],
+    [32, 74, 1], [34, 74, 1], [36, 79, 2], [39, 78, 1], [40, 74, 2], [44, 71, 2],
+    [48, 69, 2], [50, 74, 2], [52, 78, 2], [54, 81, 2], [56, 78, 4], [60, 74, 4]]);
+  const PRE = phrase([[0, 72, 8], [8, 74, 8], [16, 74, 8], [24, 76, 8], [32, 76, 8], [40, 78, 8], [48, 79, 12]]);
+  const PRE_PROG = [CM, DM, CM, DM], PRE_ROOT = [36, 38, 36, 38];
+
+  function playStage(sec, bar, s, t, sd) {
+    const i4 = bar % 4, st = i4 * 16 + s;
+    const ch = PROG[i4], root = ROOT[i4];
+    const hot = intensity >= 0.45;
+    if (sec === 'intro') {
+      if (s === 0) pad(ch, t, sd * 16, 0.035);
+      if (s % 2 === 0) pluck(ch[(s / 2) % 3] + 12, t, 0.035, 0.12);
+      if (bar >= 2 && s % 4 === 0) kick(t, 0.25, false);
+      if (s % 2 === 1) hat(t, 0.025);
+      if (bar === 3 && s === 0) riser(t, sd * 16, 0.06);
+    } else if (sec === 'verse') {
+      if (s % 4 === 0) kick(t, 0.38, true);
+      if (s === 4 || s === 12) clap(t, 0.12);
+      if (s % 2 === 1 || hot) hat(t, s % 4 === 2 ? 0.05 : 0.03);
+      if ([0, 3, 6, 8, 11, 14].includes(s)) bass808(root, t, sd * (s % 8 === 0 ? 3 : 2), 0.16);
+      if (s === 0) pad(ch, t, sd * 16, 0.022);
+      const m = VERSE[st]; if (m) pluck(m[0], t, 0.06, 0.08 + m[1] * sd * 0.6);
+      if (hot && s % 2 === 0) pluck(ch[(s / 2) % 3] + 24, t, 0.02, 0.06);
+    } else if (sec === 'pre') {
+      const pc = PRE_PROG[i4], pr = PRE_ROOT[i4];
+      if (bar < 2 && s % 4 === 0) kick(t, 0.36, true);
+      if (bar === 2 && s % 8 === 0) kick(t, 0.36, true);
+      const every = [4, 2, 1, 1][i4];
+      if (!(bar === 3 && s >= 12) && s % every === 0) snare(t, 0.05 + (st / 64) * 0.16); // 스네어 롤 빌드업
+      if (s === 0) { pad(pc, t, sd * 16, 0.03); bass808(pr, t, sd * 12, 0.13); }
+      if (bar === 0 && s === 0) riser(t, sd * 60, 0.09);
+      const m = PRE[st]; if (m) supersaw(m[0], t, m[1] * sd, 0.03, 2400);
+      // 마지막 박은 정적 → 드롭
+    } else if (sec === 'drop') {
+      if (bar === 0 && s === 0) crash(t);
+      if (s % 4 === 0) kick(t, 0.42, true);
+      if (s === 4 || s === 12) clap(t, 0.17);
+      hat(t, s % 4 === 2 ? 0.07 : 0.025, s % 4 === 2);
+      if ([0, 3, 6, 8, 11, 14].includes(s)) bass808(root, t, sd * (s % 8 === 0 ? 3 : 2), 0.2, s === 8 ? root + 12 : 0);
+      if (s === 2 || s === 6 || s === 10 || s === 14) stab(ch.map((n) => n - 12), t, 0.025);
+      const hook = bar < 4 ? HOOK_A : HOOK_B;
+      const m = hook[st];
+      if (m) {
+        supersaw(m[0], t, m[1] * sd, 0.05, 3200);
+        if (hot) supersaw(m[0] + 12, t, m[1] * sd, 0.022, 4500); // 긴장도 높으면 옥타브 더블링
+      }
+    }
+  }
+
+  // 보스: 140BPM 하프타임 트랩 (E 프리지안), 808 글라이드 + 브라스 리프
+  const B_PROG = [[64, 67, 71], [65, 69, 72], [64, 67, 71], [63, 66, 69]], B_ROOT = [40, 41, 40, 39];
+  const RIFF = phrase([[0, 76, 1], [2, 76, 1], [3, 79, 2], [6, 77, 2], [8, 76, 1], [10, 74, 1], [11, 76, 3], [14, 71, 2]]);
+  const SOAR = phrase([[0, 83, 4], [4, 82, 2], [6, 79, 2], [8, 77, 4], [12, 76, 4]]);
+  function playBoss(sec, bar, s, t, sd) {
+    const i4 = bar % 4, ch = B_PROG[i4], root = B_ROOT[i4], tr = root - 40;
+    const hot = intensity >= 0.45;
+    if (s === 0 || s === 6 || s === 10 || (bar % 2 === 1 && s === 14)) kick(t, 0.42, true);
+    if (s === 8) { clap(t, 0.18); snare(t, 0.1); }
+    if (s === 0 && bar % 4 === 0) crash(t);
+    hat(t, 0.035);
+    if (s >= 12 && bar % 2 === 1) hat(t + sd / 2, 0.03); // 트랩 하이햇 롤
+    if (s === 0) bass808(root, t, sd * 6, 0.22);
+    if (s === 6) bass808(root, t, sd * 4, 0.2);
+    if (s === 10) bass808(root, t, sd * 6, 0.22, root + 12);
+    if (s === 0 || s === 8) stab([root + 24, root + 31, root + 36], t, 0.03);
+    const m = (sec === 'A' ? RIFF : SOAR)[s];
+    if (m) {
+      if (sec === 'A') stab([m[0] + tr], t, 0.05);
+      else supersaw(m[0] + tr, t, m[1] * sd, 0.045, 3000);
+    }
+    if (hot && s % 2 === 0) pluck(ch[(s / 2) % 3] + 12, t, 0.025, 0.06);
+    if (bar === 7 && s === 0) riser(t, sd * 16, 0.07);
+  }
+
+  // 타이틀: 100BPM 신스팝 — 같은 화성 위에 후렴 훅을 부드럽게 미리 들려줌
+  function playTitle(sec, bar, s, t, sd) {
+    const i4 = bar % 4, ch = PROG[i4], root = ROOT[i4];
+    if (s === 0) pad(ch, t, sd * 16, 0.04);
+    if (s % 2 === 0) pluck(ch[(s / 2) % 3] + 12, t, 0.028, 0.14);
+    if (s === 0 || s === 8 || s === 10) kick(t, 0.26, true);
+    if (bar >= 4 && (s === 4 || s === 12)) clap(t, 0.08);
+    if (s % 4 === 2) hat(t, 0.03);
+    if (s === 0 || s === 10) bass808(root, t, sd * 6, 0.12);
+    if (bar >= 4) { const m = HOOK_A[i4 * 16 + s]; if (m) pluck(m[0], t, 0.05, 0.1 + m[1] * sd * 0.5); }
+  }
 
   const TRACKS = {
-    // 타이틀: 느리고 불길한 전운 (A단조, 반음 하강)
-    title: {
-      bpm: 92, lead: 'triangle', leadVol: 0.09, bassVol: 0.09, arpVol: 0.03,
-      kick: [0, 8], snare: [], hat: 0, riser: false,
-      melody: [
-        69, 0, 0, 0, 0, 0, 72, 0, 0, 0, 71, 0, 0, 0, 0, 0,
-        69, 0, 0, 0, 0, 0, 65, 0, 0, 0, 64, 0, 0, 0, 0, 0,
-        62, 0, 0, 0, 0, 0, 65, 0, 0, 0, 69, 0, 0, 0, 0, 0,
-        68, 0, 0, 0, 0, 0, 71, 0, 0, 0, 76, 0, 0, 0, 0, 0,
-      ],
-      bass: bars([45, 41, 38, 40], PULSE8),
-      arp: arps([[57, 60, 64, 69], [53, 57, 60, 65], [50, 53, 57, 62], [52, 56, 59, 64]]),
-    },
-    // 스테이지: 빠른 D단조 전투곡. 질주하는 베이스 + 긴박한 리드, B파트에서 고음으로 상승
-    stage: {
-      bpm: 156, lead: 'square', leadVol: 0.05, bassVol: 0.075, arpVol: 0.028,
-      kick: [0, 4, 8, 12], snare: [4, 12], hat: 2, riser: true,
-      melody: [
-        // A
-        74, 0, 74, 0, 72, 0, 74, 0, 0, 0, 77, 0, 76, 0, 74, 0,
-        74, 0, 74, 0, 72, 0, 70, 0, 0, 0, 69, 0, 70, 0, 72, 0,
-        72, 0, 72, 0, 70, 0, 72, 0, 0, 0, 76, 0, 74, 0, 72, 0,
-        73, 0, 0, 0, 76, 0, 0, 0, 79, 0, 0, 0, 81, 0, 82, 0,
-        // B
-        86, 0, 0, 0, 0, 0, 84, 0, 82, 0, 0, 0, 81, 0, 79, 0,
-        82, 0, 0, 0, 0, 0, 81, 0, 79, 0, 0, 0, 77, 0, 74, 0,
-        81, 0, 0, 0, 0, 0, 79, 0, 77, 0, 0, 0, 76, 0, 77, 0,
-        73, 0, 76, 0, 79, 0, 76, 0, 73, 0, 76, 0, 81, 0, 0, 0,
-      ],
-      bass: bars([50, 46, 48, 45, 50, 46, 48, 45], GALLOP),
-      arp: arps([[62, 65, 69, 74], [58, 62, 65, 70], [60, 64, 67, 72], [61, 64, 69, 73],
-        [62, 65, 69, 74], [58, 62, 65, 70], [60, 64, 67, 72], [61, 64, 69, 73]]),
-    },
-    // 보스: 더 빠르고 무거운 E 프리지안. 경보음 같은 트라이톤 리드 + 투베이스 킥
-    boss: {
-      bpm: 172, lead: 'sawtooth', leadVol: 0.04, bassVol: 0.085, arpVol: 0.026,
-      kick: [0, 4, 8, 12, 14, 15], snare: [4, 12], hat: 1, riser: true,
-      melody: [
-        76, 0, 0, 70, 0, 0, 76, 0, 75, 0, 70, 0, 71, 0, 72, 0,
-        77, 0, 0, 71, 0, 0, 77, 0, 76, 0, 71, 0, 72, 0, 73, 0,
-        76, 0, 0, 70, 0, 0, 76, 0, 75, 0, 70, 0, 71, 0, 72, 0,
-        76, 75, 74, 73, 72, 71, 70, 69, 70, 0, 76, 0, 82, 0, 0, 0,
-      ],
-      bass: bars([52, 52, 53, 51], STOMP),
-      arp: arps([[64, 67, 70, 73], [64, 67, 70, 73], [65, 68, 71, 74], [63, 66, 69, 72]]),
-    },
+    title: { bpm: 100, sections: [['main', 8]], loopFrom: 0, play: playTitle },
+    stage: { bpm: 128, sections: [['intro', 4], ['verse', 8], ['pre', 4], ['drop', 8]], loopFrom: 1, play: playStage },
+    boss: { bpm: 140, sections: [['A', 4], ['B', 4]], loopFrom: 0, play: playBoss },
   };
+
+  // 사용자 음원 (music/list.json 에 파일 이름을 적으면 합성곡 대신 재생)
+  const custom = {};
+  let customSrc = null, customLoaded = false;
+  function loadCustomMusic() {
+    if (customLoaded || !ctx || !/^https?:$/.test(location.protocol)) return;
+    customLoaded = true;
+    fetch('music/list.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : {})).then((list) => {
+      for (const name of ['title', 'stage', 'boss']) {
+        const file = list && list[name];
+        if (!file) continue;
+        fetch('music/' + file).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
+          .then((buf) => new Promise((res, rej) => ctx.decodeAudioData(buf, res, rej)))
+          .then((ab) => { custom[name] = ab; if (music.name === name) { music.name = null; setMusic(name); } })
+          .catch(() => { /* 파일 없음·형식 오류 → 합성곡 사용 */ });
+      }
+    }).catch(() => {});
+  }
 
   const music = { name: null, track: null, step: 0, next: 0 };
 
   function setMusic(name) {
     if (music.name === name) return;
     music.name = name;
+    if (customSrc) { try { customSrc.stop(); } catch (e) { /* 이미 정지 */ } customSrc = null; }
+    if (name && custom[name] && ctx) {
+      customSrc = ctx.createBufferSource();
+      customSrc.buffer = custom[name];
+      customSrc.loop = true;
+      customSrc.connect(musicBus);
+      customSrc.start();
+      music.track = null;
+      return;
+    }
     music.track = TRACKS[name] || null;
     music.step = 0;
     music.next = ctx ? ctx.currentTime + 0.08 : 0;
   }
 
-  function playStep(tr, i, t, sd) {
-    const len = tr.melody.length;
-    const s16 = i % 16;
-    const n = tr.melody[i % len];
-    if (n) toneAt(musicBus, tr.lead, mf(n), mf(n), t, sd * 1.6, tr.leadVol);
-    const b = tr.bass[i % tr.bass.length];
-    if (b) {
-      toneAt(musicBus, 'square', mf(b), mf(b), t, sd * 0.8, tr.bassVol * 0.55);
-      toneAt(musicBus, 'triangle', mf(b - 12), mf(b - 12), t, sd * 0.9, tr.bassVol);
+  function songPos(tr, step) {
+    let bar = Math.floor(step / 16);
+    const total = tr.sections.reduce((a, x) => a + x[1], 0);
+    const head = tr.sections.slice(0, tr.loopFrom).reduce((a, x) => a + x[1], 0);
+    if (bar >= total) bar = head + ((bar - head) % (total - head));
+    for (const [name, len] of tr.sections) {
+      if (bar < len) return [name, bar];
+      bar -= len;
     }
-    // 긴장도가 오를수록 레이어 추가
-    if (intensity >= 0.45 || tr.hat === 0) {
-      const a = tr.arp[i % tr.arp.length];
-      if (a && (tr.hat !== 0 || i % 2 === 0)) toneAt(musicBus, 'square', mf(a + 12), mf(a + 12), t, sd * 0.5, tr.arpVol);
-    }
-    if (tr.kick.includes(s16)) toneAt(musicBus, 'sine', 150, 42, t, 0.13, 0.4);
-    if (tr.snare.includes(s16)) {
-      noiseAt(musicBus, t, 0.13, 0.2, 6000, 1500);
-      toneAt(musicBus, 'triangle', 220, 120, t, 0.07, 0.12);
-    }
-    if (tr.hat) {
-      const every = intensity >= 0.3 ? 1 : tr.hat;
-      if (i % every === 0) noiseAt(musicBus, t, 0.035, s16 % 4 === 2 ? 0.07 : 0.04, 7000, 9000, 'highpass');
-    }
-    // 4마디마다 끝에서 긴장감을 끌어올리는 상승 노이즈
-    if (tr.riser && intensity >= 0.45 && i % 64 === 48) noiseAt(musicBus, t, sd * 16, 0.05, 400, 9000);
+    return [tr.sections[0][0], 0];
   }
 
   // 매 프레임 호출: 0.15초 앞까지 음표를 미리 예약 (프레임이 흔들려도 박자가 일정)
   function updateMusic() {
-    if (!ctx || ctx.state !== 'running' || !music.track || !musicOn) return;
+    if (!ctx || ctx.state !== 'running' || !musicOn) return;
+    loadCustomMusic();
     const tr = music.track;
+    if (!tr) return;
     const sd = 60 / tr.bpm / 4;
-    const len = tr.melody.length;
     if (music.next < ctx.currentTime - 0.1) music.next = ctx.currentTime + 0.03; // 일시중단 후 복귀
     while (music.next < ctx.currentTime + 0.15) {
-      playStep(tr, music.step, music.next, sd);
-      music.step = (music.step + 1) % len;
+      const [sec, bar] = songPos(tr, music.step);
+      try { tr.play(sec, bar, music.step % 16, music.next, sd); } catch (e) { if (!music.err) { music.err = true; console.error('music', e); } }
+      music.step++;
+      if (music.step > 16 * 4096) music.step = 16 * 64;
       music.next += sd;
     }
   }
@@ -300,6 +463,7 @@
     unlock,
     setMusic,
     updateMusic,
+    _tracks: TRACKS, _songPos: songPos, // 테스트용
     setIntensity(v) { intensity = Math.max(0, Math.min(1, v)); },
     // 'running'이면 소리가 나는 상태
     state() { return ctx ? ctx.state : 'none'; },

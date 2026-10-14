@@ -72,7 +72,8 @@
           let c = h < 0.5 ? mix(deep, mid, sstep(0.3, 0.5, h)) : mix(mid, shallow, sstep(0.5, 0.64, h));
           return mix(c, [255, 255, 255], (f.rip - 0.5) * 0.12 + 0.02);
         }
-        if (h < 0.66) return mix(hex('#5fd6cc'), hex('#efe3b4'), sstep(0.64, 0.66, h));
+        if (h < 0.646) return mix(hex('#5fd6cc'), hex('#f2fbfb'), sstep(0.637, 0.646, h)); // 쇄파
+        if (h < 0.66) return mix(hex('#e9f6f2'), hex('#efe3b4'), sstep(0.646, 0.66, h));
         const land = mix(hex('#4c9a3e'), hex('#22582a'), sstep(0.67, 0.8, h));
         return land.map((v) => v * sh);
       },
@@ -80,42 +81,58 @@
     desert: {
       seed: 202,
       field(nx, ny) {
-        const warp = n(nx, ny, 0.75, 0.75, 3, this.seed + 3) * 1.4;
-        const dune = 1 - Math.abs(2 * n(nx + warp, ny + warp * 0.25, 1.8, 0.75, 4, this.seed) - 1);
-        const base = n(nx, ny, 0.5, 0.5, 3, this.seed + 7);
+        // 바람에 수직인 횡사구: 휘어진 사인 띠 (세로 주기 유지를 위해 휨은 노이즈로)
+        const warp = n(nx, ny, 0.5, 0.75, 3, this.seed + 3);
+        const phase = nx * 1.7 + warp * 4.5 + n(nx, ny, 1.5, 1.5, 3, this.seed + 8) * 0.9;
+        const sw = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2);
+        const cross = n(nx, ny, 2.5, 2.5, 3, this.seed + 23);           // 작은 사구가 겹쳐 규칙성을 깸
+        const dune = Math.pow(sw, 2.2) * 0.65 + cross * 0.35;          // 완만한 바람받이 + 가파른 미끄럼면
+        const field = n(nx, ny, 0.5, 0.5, 4, this.seed + 7);
         const rock = n(nx + 5, ny, 0.5, 0.5, 4, this.seed + 11);
+        const flat = n(nx + 9, ny, 0.375, 0.375, 3, this.seed + 15); // 자갈 평원
+        const tone = n(nx, ny, 0.25, 0.25, 2, this.seed + 27);
         const wadi = Math.abs(n(nx, ny, 0.625, 0.625, 3, this.seed + 19) - 0.5);
-        return { h: Math.pow(dune, 1.5) * 0.6 + base * 0.4, rock, wadi };
+        const amp = 1 - sstep(0.5, 0.65, flat);
+        return { h: dune * 0.42 * amp + field * 0.58, rock, flat, tone, wadi };
       },
-      relief(f) { return f.rock > 0.6 ? 110 : 34; },
+      relief(f) { return f.rock > 0.6 ? 110 : 40; },
       color(f, sh) {
-        let c = mix(hex('#c39457'), hex('#ecca8e'), sstep(0.3, 0.75, f.h));
-        if (f.rock > 0.6) c = mix(c, mix(hex('#94663c'), hex('#b4814c'), f.h), sstep(0.6, 0.64, f.rock));
-        if (f.wadi < 0.012) c = mix(c, hex('#e3d6b2'), 0.6);
+        let c = mix(hex('#c99a5c'), hex('#efd29a'), sstep(0.25, 0.8, f.h));
+        c = mix(c, mix(hex('#d8a46a'), hex('#e6cfa0'), f.tone), 0.45);       // 붉은 모래 ↔ 옅은 모래
+        if (f.flat > 0.55) c = mix(c, hex('#b49a76'), sstep(0.55, 0.68, f.flat) * 0.7);
+        if (f.rock > 0.6) c = mix(c, mix(hex('#8e623a'), hex('#b4814c'), f.h), sstep(0.6, 0.65, f.rock));
+        if (f.wadi < 0.012) c = mix(c, hex('#e6dcc0'), 0.55 * (1 - f.wadi / 0.012));
         return c.map((v) => v * sh);
       },
     },
     mountain: {
       seed: 303,
       field(nx, ny) {
-        const r = 1 - Math.abs(2 * n(nx, ny, 1.25, 1.25, 6, this.seed) - 1);
-        const h = Math.pow(r, 1.7) * 0.82 + n(nx, ny, 0.5, 0.5, 3, this.seed + 5) * 0.18;
+        const r = 1 - Math.abs(2 * n(nx, ny, 1.25, 1.25, 5, this.seed) - 1);
+        const h = Math.pow(r, 1.7) * 0.8 + n(nx, ny, 0.5, 0.5, 3, this.seed + 5) * 0.2;
         const ice = n(nx, ny, 0.875, 0.875, 3, this.seed + 13);
-        return { h, ice };
+        const river = Math.abs(n(nx, ny, 0.5, 0.5, 4, this.seed + 31) - 0.5);
+        const tex = n(nx, ny, 6, 6, 2, this.seed + 41);
+        return { h, ice, river, tex };
       },
-      relief() { return 150; },
+      relief() { return 120; },
       color(f, sh) {
-        const h = f.h;
+        const h = f.h, slope = f.slope || 0;
         let c;
-        if (h < 0.28) c = mix(hex('#4f5a3c'), hex('#6e6150'), sstep(0.12, 0.28, h));
-        else c = mix(hex('#6e6150'), hex('#8b8a8c'), sstep(0.28, 0.48, h));
+        if (h < 0.22) c = mix(hex('#2f4a26'), hex('#4a5c34'), sstep(0.08, 0.22, h));          // 계곡 숲
+        else if (h < 0.34) c = mix(hex('#4a5c34'), hex('#6e6150'), sstep(0.22, 0.34, h));     // 수목한계선
+        else c = mix(hex('#6e6150'), hex('#8d8b8c'), sstep(0.34, 0.5, h));                    // 암벽
+        c = c.map((v) => v * (0.94 + f.tex * 0.12));
+        if (h < 0.2 && f.river < 0.01) c = mix(c, hex('#5f8fa8'), 0.8);                        // 빙하 녹은 강
         if (f.ice > 0.6 && h > 0.3 && h < 0.5) c = mix(c, hex('#cfe2f0'), sstep(0.6, 0.66, f.ice));
-        const snow = sstep(0.5, 0.58, h);
+        // 눈: 높고 완만한 곳에 쌓이고, 가파른 절벽은 바위가 드러남
+        const snow = sstep(0.46, 0.58, h) * (1 - 0.6 * sstep(1.2, 2.6, slope));
+        const lit = c.map((v) => v * sh);
         if (snow > 0) {
-          const sn = mix(hex('#8ea6c4'), hex('#f6f9fc'), Math.max(0, Math.min(1, (sh - 0.45) / 0.75)));
-          return mix(c.map((v) => v * sh), sn, snow);
+          const sn = mix(hex('#8aa2c2'), hex('#f7fafd'), Math.max(0, Math.min(1, (sh - 0.45) / 0.75)));
+          return mix(lit, sn, snow);
         }
-        return c.map((v) => v * sh);
+        return lit;
       },
     },
     arctic: {
@@ -306,6 +323,7 @@
           const f = fields[y * gw + x];
           const k = B.relief(f);
           const dx = (H[y * gw + xr] - H[y * gw + xl]) * k, dy = (H[yd * gw + x] - H[yu * gw + x]) * k;
+          f.slope = Math.sqrt(dx * dx + dy * dy) / Math.max(1, k) * 40;
           const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
           const dot = (-dx * L[0] - dy * L[1] + L[2]) * inv;
           const sh = Math.max(0.35, Math.min(1.35, 0.45 + dot * 0.75));
@@ -326,6 +344,17 @@
       g.imageSmoothingQuality = 'high';
       g.scale(R, R);
       g.drawImage(raw, 0, 0, gw * CELL, TH);
+      // 사진 같은 미세 입자 질감 (세로 이음매가 없도록 타일 전체에 균일하게)
+      const grain = document.createElement('canvas');
+      grain.width = grain.height = 128;
+      const gg = grain.getContext('2d'), gd = gg.createImageData(128, 128);
+      for (let i = 0; i < gd.data.length; i += 4) {
+        const v = Math.random() < 0.5 ? 0 : 255;
+        gd.data[i] = gd.data[i + 1] = gd.data[i + 2] = v; gd.data[i + 3] = Math.random() * 18;
+      }
+      gg.putImageData(gd, 0, 0);
+      g.fillStyle = g.createPattern(grain, 'repeat');
+      g.fillRect(0, 0, W, TH);
       const rnd = rng(B.seed * 7 + Math.round(W));
       this.extra = decorate(g, this.biome, W, rnd) || {};
       if (this.extra.lights) {
@@ -370,7 +399,11 @@
       if (!this.tile) return;
       const W = C.WIDTH, H = C.HEIGHT;
       ctx.imageSmoothingEnabled = true;
-      for (let y = this.scroll - TH; y < H; y += TH) ctx.drawImage(this.tile, 0, y, W, TH);
+      const px = 1 / Math.max(1, SS.view.scale || 1);
+      for (let y = this.scroll - TH; y < H; y += TH) {
+        const yy = Math.round(y / px) * px;
+        ctx.drawImage(this.tile, 0, yy, W, TH + px * 2); // 경계에 머리카락 같은 선이 생기지 않도록 겹침
+      }
       if (this.fires) { // 불타는 유정: 깜빡이는 불길 + 연기
         const fire = SS.FX && SS.FX.sprite('fire');
         for (let y0 = this.scroll - TH; y0 < H; y0 += TH) {
@@ -425,6 +458,23 @@
       ctx.globalAlpha = cl.alpha;
       for (const c of this.clouds) ctx.drawImage(c.img, c.x, c.y, c.img.width * c.s, c.img.height * c.s);
       ctx.globalAlpha = 1;
+    }
+
+    // 대기 원근감: 화면 위쪽(먼 곳)일수록 옅은 연무 — 항공기보다 아래층
+    drawHaze(ctx) {
+      const W = C.WIDTH, H = C.HEIGHT;
+      const haze = { sea: '200,225,240', desert: '245,225,190', mountain: '215,228,245', arctic: '230,200,200', gulfnight: '20,24,40' }[this.biome];
+      if (haze) {
+        if (!this.hazeGrad || this.hazeH !== H || this.hazeB !== this.biome) {
+          this.hazeGrad = ctx.createLinearGradient(0, 0, 0, H);
+          this.hazeGrad.addColorStop(0, `rgba(${haze},0.28)`);
+          this.hazeGrad.addColorStop(0.45, `rgba(${haze},0.06)`);
+          this.hazeGrad.addColorStop(1, `rgba(${haze},0)`);
+          this.hazeH = H; this.hazeB = this.biome;
+        }
+        ctx.fillStyle = this.hazeGrad;
+        ctx.fillRect(0, 0, W, H);
+      }
     }
 
     // 화면 고정 색감 (황혼·야간)

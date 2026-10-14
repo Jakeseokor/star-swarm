@@ -27,6 +27,9 @@
     fireButton: null,     // 수동 발사 모드일 때 {x, y, r}
     bombButton: null,     // 게임 중일 때 {x, y, r}
     bombPressed: false,   // 이번 프레임에 폭탄 버튼/키가 눌렸는지
+    joystick: null,       // 조그셔틀 영역 {x, y, r} (켜져 있고 게임 중일 때)
+    joyId: null,
+    joyX: 0, joyY: 0,     // 조그셔틀 기울기 (-1 ~ 1)
     usedKeyboard: false,
     canvas: null,
 
@@ -64,8 +67,9 @@
 
     reset() {
       this.keys.left = this.keys.right = this.keys.up = this.keys.down = this.keys.fire = false;
-      this.dragId = this.fireId = null;
+      this.dragId = this.fireId = this.joyId = null;
       this.fireHeld = false;
+      this.joyX = this.joyY = 0;
       this.dragDX = this.dragDY = 0;
     },
 
@@ -93,11 +97,31 @@
       return dx * dx + dy * dy <= r * r;
     },
 
+    inJoystick(p) {
+      const j = this.joystick;
+      if (!j) return false;
+      const dx = p.x - j.x, dy = p.y - j.y, r = j.r + 26;
+      return dx * dx + dy * dy <= r * r;
+    },
+
+    setJoy(p) {
+      const j = this.joystick;
+      let dx = (p.x - j.x) / j.r, dy = (p.y - j.y) / j.r;
+      const len = Math.hypot(dx, dy);
+      if (len > 1) { dx /= len; dy /= len; }
+      this.joyX = dx; this.joyY = dy;
+    },
+
     onDown(e) {
       e.preventDefault();
       SS.Audio.unlock();
       const p = this.toGame(e.clientX, e.clientY);
       this.taps.push(p);
+      if (this.joyId === null && this.inJoystick(p)) {
+        this.joyId = e.pointerId;
+        this.setJoy(p);
+        return;
+      }
       if (this.inBombButton(p)) {
         this.bombPressed = true;
         return;
@@ -115,6 +139,11 @@
     },
 
     onMove(e) {
+      if (e.pointerId === this.joyId) {
+        e.preventDefault();
+        this.setJoy(this.toGame(e.clientX, e.clientY));
+        return;
+      }
       if (e.pointerId !== this.dragId) return;
       e.preventDefault();
       const p = this.toGame(e.clientX, e.clientY);
@@ -125,6 +154,7 @@
     },
 
     onUp(e) {
+      if (e.pointerId === this.joyId) { this.joyId = null; this.joyX = this.joyY = 0; }
       if (e.pointerId === this.dragId) this.dragId = null;
       if (e.pointerId === this.fireId) {
         this.fireId = null;

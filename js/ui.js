@@ -133,12 +133,16 @@
   const PAUSE_BTN = { x: 0, y: 0, w: 44, h: 38 };
   const FIRE_BTN = { x: 0, y: 0, r: 40 };
   const BOMB_BTN = { x: 0, y: 0, r: 32 };
+  const JOY = { x: 0, y: 0, r: 54 }; // 조그셔틀 (우측 하단)
+  // 오른손: 조그셔틀 / 왼손: 발사(수동 모드)·폭탄
   function layout() {
     W = C.WIDTH; H = C.HEIGHT;
     const st = SS.view.safeTop, sb = SS.view.safeBottom;
+    const manual = SS.game && SS.game.save.fireMode === 'manual';
     Object.assign(PAUSE_BTN, { x: W - 52, y: 6 + st });
-    Object.assign(FIRE_BTN, { x: W - 66, y: H - 72 - sb });
-    Object.assign(BOMB_BTN, { x: 52, y: H - 84 - sb });
+    Object.assign(JOY, { x: W - 84, y: H - 100 - sb });
+    Object.assign(FIRE_BTN, { x: 64, y: H - 84 - sb });
+    Object.assign(BOMB_BTN, manual ? { x: 54, y: H - 186 - sb } : { x: 52, y: H - 84 - sb });
   }
   SS.onView(layout);
   layout();
@@ -165,6 +169,8 @@
       const B = (y, label, sub, action, extra) => Object.assign({ x: bx, y, w: bw, h: 52, label, sub, action }, extra || {});
       const soundBtn = (y) => B(y, 'SOUND: ' + (s.sound ? 'ON' : 'OFF'), '효과음 켜기/끄기', () => g.toggleSound());
       const musicBtn = (y) => B(y, 'MUSIC: ' + (s.music ? 'ON' : 'OFF'), '배경음악 켜기/끄기', () => g.toggleMusic());
+      const joyBtn = (y) => B(y, 'JOG: ' + (s.joystick ? 'ON' : 'OFF'),
+        s.joystick ? '우측 하단 조그셔틀 사용 중 (드래그도 가능)' : '조그셔틀 끔 · 화면 드래그로 이동', () => g.toggleJoystick());
       const fireBtn = (y) => B(y, 'FIRE: ' + (s.fireMode === 'auto' ? 'AUTO' : 'MANUAL'),
         s.fireMode === 'auto' ? '자동 연사 (탭하면 수동 버튼으로)' : '수동 발사 버튼 (탭하면 자동으로)', () => g.toggleFireMode());
 
@@ -188,23 +194,25 @@
         }
         case 'settings':
           return [
-            soundBtn(150),
-            musicBtn(212),
-            fireBtn(274),
-            B(336, this.confirmReset ? 'REALLY RESET?' : 'RESET RECORDS',
+            soundBtn(118),
+            musicBtn(178),
+            fireBtn(238),
+            joyBtn(298),
+            B(358, this.confirmReset ? 'REALLY RESET?' : 'RESET RECORDS',
               this.confirmReset ? '한 번 더 누르면 최고점수·해금 초기화' : '기록 초기화',
               () => {
                 if (this.confirmReset) { g.resetRecords(); this.confirmReset = false; } else this.confirmReset = true;
               }),
-            B(410, 'BACK', '타이틀로', () => g.goto('title')),
+            B(424, 'BACK', '타이틀로', () => g.goto('title')),
           ];
         case 'paused':
           return [
-            B(176, 'RESUME', '계속하기', () => g.resume()),
-            soundBtn(238),
-            musicBtn(300),
-            fireBtn(362),
-            B(424, 'QUIT', '타이틀로 나가기', () => g.quitToTitle()),
+            B(150, 'RESUME', '계속하기', () => g.resume()),
+            soundBtn(210),
+            musicBtn(270),
+            fireBtn(330),
+            joyBtn(390),
+            B(450, 'QUIT', '타이틀로 나가기', () => g.quitToTitle()),
           ];
         case 'stageclear':
           return this.game.stateTime > 1.2
@@ -288,9 +296,9 @@
       switch (st) {
         case 'title': this.drawTitle(ctx); break;
         case 'select': this.drawHeader(ctx, 'SELECT STAGE', '클리어한 단계까지 선택할 수 있어요', 36); break;
-        case 'settings': this.drawHeader(ctx, 'SETTINGS', '설정은 자동 저장됩니다', 56); this.drawSettingsInfo(ctx); break;
+        case 'settings': this.drawHeader(ctx, 'SETTINGS', '설정은 자동 저장됩니다', 30); this.drawSettingsInfo(ctx); break;
         case 'playing': this.drawPlayOverlays(ctx); break;
-        case 'paused': this.drawHeader(ctx, 'PAUSED', '일시정지', 92); break;
+        case 'paused': this.drawHeader(ctx, 'PAUSED', '일시정지', 70); break;
         case 'stageclear': this.drawStageClear(ctx); break;
         case 'gameover': this.drawGameOver(ctx); break;
         case 'ending': this.drawEnding(ctx); break;
@@ -352,7 +360,7 @@
       });
 
       Gfx.ktext(ctx, '대열 / 급강하 중 격추 점수', MW / 2, 350, 11, '#7f8bcf');
-      Gfx.ktext(ctx, '터치: 드래그로 상하좌우 이동 · BOMB 버튼으로 폭탄', MW / 2, 512, 12, '#a9b6ff');
+      Gfx.ktext(ctx, '터치: 우측 하단 조그셔틀 또는 드래그로 이동 · BOMB 폭탄', MW / 2, 512, 12, '#a9b6ff');
       Gfx.ktext(ctx, '키보드: 방향키 이동 · Space 발사 · X 폭탄 · P 일시정지', MW / 2, 532, 12, '#a9b6ff');
       Gfx.ktext(ctx, '1만 점마다 생명 +1 · 캡슐 D=2연발 S=쉴드 R=속사 B=폭탄', MW / 2, 552, 12, '#a9b6ff');
       if (g.save.cleared) Gfx.text(ctx, '* ALL CLEAR *', MW / 2, 576, { size: 2, color: '#ffd23a', align: 'center' });
@@ -364,11 +372,12 @@
 
     drawSettingsInfo(ctx) {
       const lines = [
-        '수동 모드: 오른쪽 아래 FIRE 버튼을 누르고 있으면 발사',
+        '조그셔틀: 오른쪽 아래 원을 누르고 원하는 방향으로 밀기',
+        '수동 모드: 왼쪽 아래 FIRE 버튼을 누르고 있으면 발사',
         '키보드 Space는 두 모드 모두에서 발사됩니다',
         '폭탄: 왼쪽 아래 BOMB 버튼 또는 X 키',
       ];
-      lines.forEach((l, i) => Gfx.ktext(ctx, l, MW / 2, 500 + i * 22, 12, '#a9b6ff'));
+      lines.forEach((l, i) => Gfx.ktext(ctx, l, MW / 2, 504 + i * 21, 12, '#a9b6ff'));
     }
 
     drawHUD(ctx) {
@@ -449,6 +458,44 @@
         Gfx.text(ctx, 'X' + g.bombs, BOMB_BTN.x, BOMB_BTN.y - 1, { size: 2, color: has ? '#ffd23a' : '#888899', align: 'center' });
       }
 
+      // 조그셔틀
+      if (g.save.joystick && (g.state === 'playing' || g.state === 'paused')) {
+        const inp = SS.Input, j = JOY;
+        const active = inp.joyId !== null;
+        ctx.globalAlpha = active ? 0.85 : 0.5;
+        const gr = ctx.createRadialGradient(j.x, j.y, j.r * 0.2, j.x, j.y, j.r);
+        gr.addColorStop(0, 'rgba(30,40,70,0.35)'); gr.addColorStop(1, 'rgba(10,14,30,0.65)');
+        ctx.fillStyle = gr;
+        ctx.beginPath(); ctx.arc(j.x, j.y, j.r, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(180,200,255,0.7)'; ctx.stroke();
+        // 방향 눈금
+        ctx.fillStyle = 'rgba(200,215,255,0.8)';
+        for (let k = 0; k < 4; k++) {
+          const a = (k * Math.PI) / 2, cx = j.x + Math.cos(a) * (j.r - 10), cy = j.y + Math.sin(a) * (j.r - 10);
+          ctx.beginPath();
+          ctx.moveTo(cx + Math.cos(a) * 5, cy + Math.sin(a) * 5);
+          ctx.lineTo(cx + Math.cos(a + 2.3) * 5, cy + Math.sin(a + 2.3) * 5);
+          ctx.lineTo(cx + Math.cos(a - 2.3) * 5, cy + Math.sin(a - 2.3) * 5);
+          ctx.fill();
+        }
+        // 손잡이 (조그 노브)
+        const kx = j.x + inp.joyX * j.r * 0.72, ky = j.y + inp.joyY * j.r * 0.72;
+        const kg = ctx.createRadialGradient(kx - 6, ky - 6, 2, kx, ky, 24);
+        kg.addColorStop(0, '#e8eeff'); kg.addColorStop(0.5, '#8a96b8'); kg.addColorStop(1, '#3a4260');
+        ctx.fillStyle = kg;
+        ctx.beginPath(); ctx.arc(kx, ky, 22, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(20,24,40,0.9)'; ctx.lineWidth = 1.5; ctx.stroke();
+        for (let k = 0; k < 12; k++) { // 노브 홈
+          const a = (k * Math.PI) / 6;
+          ctx.beginPath();
+          ctx.moveTo(kx + Math.cos(a) * 15, ky + Math.sin(a) * 15);
+          ctx.lineTo(kx + Math.cos(a) * 20, ky + Math.sin(a) * 20);
+          ctx.strokeStyle = 'rgba(30,36,60,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        if (!active) Gfx.text(ctx, 'JOG', j.x, j.y + j.r + 6, { size: 1, color: '#c8d2ff', align: 'center' });
+      }
+
       // 수동 발사 버튼
       if (g.save.fireMode === 'manual' && g.state === 'playing') {
         const held = SS.Input.fireHeld || SS.Input.keys.fire;
@@ -487,7 +534,7 @@
       const manual = this.game.save.fireMode === 'manual';
       const kb = SS.Input.usedKeyboard;
       const steps = [
-        [kb ? '방향키로 기체를 움직이세요 (↑ 전진 · ↓ 후진)' : '화면을 드래그해 기체를 움직이세요', kb ? 'Space 발사 · P 일시정지' : '위아래로 끌면 전진·후진, 어디서든 드래그 OK'],
+        [kb ? '방향키로 기체를 움직이세요 (↑ 전진 · ↓ 후진)' : '오른쪽 아래 조그셔틀을 밀어 기체를 움직이세요', kb ? 'Space 발사 · P 일시정지' : '화면 아무 곳이나 드래그해도 이동합니다'],
         [manual ? '오른쪽 아래 FIRE 버튼을 누르고 있으면 발사' : '지금은 자동 연사 중입니다', manual ? '설정에서 자동 연사로 바꿀 수 있어요' : '설정(SETTINGS)에서 수동 발사 버튼으로 변경 가능'],
         ['적들은 곡선으로 날아와 상단에 대열을 짭니다', '급강하하는 적을 맞히면 점수 2배!'],
         ['위급할 땐 폭탄! ' + (kb ? 'X 키' : '왼쪽 아래 BOMB 버튼'), '주변 적과 적 탄을 한 번에 날려 버립니다'],
@@ -558,6 +605,8 @@
   UI.PAUSE_BTN = PAUSE_BTN;
   UI.FIRE_BTN = FIRE_BTN;
   UI.BOMB_BTN = BOMB_BTN;
+  UI.JOY = JOY;
+  UI.layout = layout;
   UI.PU_COLORS = PU_COLORS;
   UI.PU_LETTER = PU_LETTER;
   SS.UI = UI;

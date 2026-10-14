@@ -70,6 +70,13 @@
       if (inp.keys.right) dx += P.speed * dt;
       if (inp.keys.up) dy -= P.vSpeed * dt;   // 전진
       if (inp.keys.down) dy += P.vSpeed * dt; // 후진
+      // 조그셔틀: 기울인 만큼 그 방향으로 (가운데 12%는 무시)
+      const jl = Math.hypot(inp.joyX, inp.joyY);
+      if (jl > 0.12) {
+        const k = Math.min(1, (jl - 0.12) / 0.88) / jl;
+        dx += inp.joyX * k * P.speed * 1.15 * dt;
+        dy += inp.joyY * k * P.vSpeed * 1.15 * dt;
+      }
       this.x = clamp(this.x + dx, P.margin, C.WIDTH - P.margin);
       const oldY = this.y;
       this.y = clamp(this.y + dy, minY(), maxY());
@@ -120,19 +127,19 @@
         const fire = SS.FX.sprite('fire');
         ctx.globalCompositeOperation = 'lighter';
         for (const nx of [-2.3, 2.3]) {
-          const gr = ctx.createLinearGradient(0, y + 22, 0, y + 22 + len);
+          const gr = ctx.createLinearGradient(0, y + 24, 0, y + 24 + len);
           gr.addColorStop(0, 'rgba(255,255,255,0.95)');
           gr.addColorStop(0.25, 'rgba(120,200,255,0.85)');
           gr.addColorStop(0.6, 'rgba(255,150,60,0.6)');
           gr.addColorStop(1, 'rgba(255,80,20,0)');
           ctx.fillStyle = gr;
           ctx.beginPath();
-          ctx.moveTo(x + nx - 1.7, y + 22);
-          ctx.lineTo(x + nx + 1.7, y + 22);
-          ctx.lineTo(x + nx, y + 22 + len);
+          ctx.moveTo(x + nx - 1.7, y + 24);
+          ctx.lineTo(x + nx + 1.7, y + 24);
+          ctx.lineTo(x + nx, y + 24 + len);
           ctx.closePath();
           ctx.fill();
-          ctx.drawImage(fire, x + nx - 5, y + 18, 10, 10);
+          ctx.drawImage(fire, x + nx - 5, y + 20, 10, 10);
         }
         ctx.globalCompositeOperation = 'source-over';
         SS.Aircraft.draw(ctx, 'player', x, y, this.bank * 0.12);

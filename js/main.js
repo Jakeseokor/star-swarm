@@ -8,7 +8,7 @@
 
   function rand(a, b) { return a + Math.random() * (b - a); }
 
-  const DEFAULT_SAVE = { hi: 0, unlocked: 1, sound: true, music: true, fireMode: 'auto', cleared: false };
+  const DEFAULT_SAVE = { hi: 0, unlocked: 1, sound: true, music: true, fireMode: 'auto', joystick: true, cleared: false };
 
   function loadSave() {
     try {
@@ -171,6 +171,12 @@
 
     toggleFireMode() {
       this.save.fireMode = this.save.fireMode === 'auto' ? 'manual' : 'auto';
+      SS.UI.layout();
+      this.persist();
+    }
+
+    toggleJoystick() {
+      this.save.joystick = !this.save.joystick;
       this.persist();
     }
 
@@ -187,6 +193,9 @@
       this.stateTime = 0;
       SS.Input.fireButton = state === 'playing' && this.save.fireMode === 'manual' ? SS.UI.FIRE_BTN : null;
       SS.Input.bombButton = state === 'playing' ? SS.UI.BOMB_BTN : null;
+      SS.Input.joystick = state === 'playing' && this.save.joystick ? SS.UI.JOY : null;
+      if (state !== 'playing') { SS.Input.joyId = null; SS.Input.joyX = SS.Input.joyY = 0; }
+      SS.UI.layout();
     }
 
     startGame(stageNum) {
@@ -740,6 +749,7 @@
       this.stage.drawShadows(ctx);
       this.player.drawShadow(ctx);
       bg.drawClouds(ctx);
+      bg.drawHaze(ctx);
 
       // 2) 연기·비행운 (항공기 아래)
       const smoke = SS.FX.sprite('smoke'), trail = SS.FX.sprite('trail');
