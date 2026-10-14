@@ -305,46 +305,61 @@
   const PRE = phrase([[0, 72, 8], [8, 74, 8], [16, 74, 8], [24, 76, 8], [32, 76, 8], [40, 78, 8], [48, 79, 12]]);
   const PRE_PROG = [CM, DM, CM, DM], PRE_ROOT = [36, 38, 36, 38];
 
+  // 스테이지: 150BPM 업비트 K-pop 댄스 (G장조 I–V–vi–IV: G–D–Em–C)
+  const S_PROG = [[62, 67, 71], [62, 66, 69], [64, 67, 71], [60, 64, 67]], S_ROOT = [43, 38, 40, 36];
+  const S_PRE = [[60, 64, 69], [60, 64, 67], [62, 66, 69], [62, 66, 69]], S_PRE_ROOT = [45, 36, 38, 38];
+  function chant(ch, t, vol) { // 구호처럼 짧게 외치는 신스 코러스 ("Hey!" 자리)
+    noiseAt(musicBus, t, 0.09, vol * 0.8, 3000, 1200, 'bandpass');
+    stab(ch.map((n) => n + 12), t, vol * 0.6);
+  }
   function playStage(sec, bar, s, t, sd) {
     const i4 = bar % 4, st = i4 * 16 + s;
-    const ch = PROG[i4], root = ROOT[i4];
+    const ch = S_PROG[i4], root = S_ROOT[i4];
     const hot = intensity >= 0.45;
     if (sec === 'intro') {
       if (s === 0) pad(ch, t, sd * 16, 0.035);
-      if (s % 2 === 0) pluck(ch[(s / 2) % 3] + 12, t, 0.035, 0.12);
-      if (bar >= 2 && s % 4 === 0) kick(t, 0.25, false);
-      if (s % 2 === 1) hat(t, 0.025);
-      if (bar === 3 && s === 0) riser(t, sd * 16, 0.06);
+      pluck(ch[s % 3] + 12, t, 0.03, 0.08);                       // 16분음표 아르페지오
+      if (s % 4 === 0) kick(t, 0.3, true);
+      if (s % 2 === 1) hat(t, 0.03);
+      if (bar === 1 && s === 0) riser(t, sd * 16, 0.07);
     } else if (sec === 'verse') {
-      if (s % 4 === 0) kick(t, 0.38, true);
-      if (s === 4 || s === 12) clap(t, 0.12);
-      if (s % 2 === 1 || hot) hat(t, s % 4 === 2 ? 0.05 : 0.03);
-      if ([0, 3, 6, 8, 11, 14].includes(s)) bass808(root, t, sd * (s % 8 === 0 ? 3 : 2), 0.16);
-      if (s === 0) pad(ch, t, sd * 16, 0.022);
-      const m = VERSE[st]; if (m) pluck(m[0], t, 0.06, 0.08 + m[1] * sd * 0.6);
-      if (hot && s % 2 === 0) pluck(ch[(s / 2) % 3] + 24, t, 0.02, 0.06);
+      if (s % 4 === 0) kick(t, 0.4, true);
+      if (s === 4 || s === 12) { clap(t, 0.13); snare(t, 0.05); }
+      hat(t, s % 4 === 2 ? 0.06 : 0.028, s % 4 === 2);
+      if (s % 4 === 2) bass808(root + 12, t, sd * 1.6, 0.15);      // 엇박 하우스 베이스
+      if (s === 0) { bass808(root, t, sd * 2, 0.17); pad(ch, t, sd * 16, 0.022); }
+      if (s % 2 === 0) pluck(ch[(s / 2) % 3] + 12, t, 0.025, 0.06);
+      const m = VERSE[st]; if (m) pluck(m[0], t, 0.065, 0.08 + m[1] * sd * 0.6);
     } else if (sec === 'pre') {
-      const pc = PRE_PROG[i4], pr = PRE_ROOT[i4];
-      if (bar < 2 && s % 4 === 0) kick(t, 0.36, true);
-      if (bar === 2 && s % 8 === 0) kick(t, 0.36, true);
+      const pc = S_PRE[i4], pr = S_PRE_ROOT[i4];
+      if (bar < 3 && s % 4 === 0) kick(t, 0.38, true);
+      if (bar === 3 && s % 2 === 0 && s < 12) kick(t, 0.3, true);   // 킥이 촘촘해지며 몰아붙임
       const every = [4, 2, 1, 1][i4];
-      if (!(bar === 3 && s >= 12) && s % every === 0) snare(t, 0.05 + (st / 64) * 0.16); // 스네어 롤 빌드업
-      if (s === 0) { pad(pc, t, sd * 16, 0.03); bass808(pr, t, sd * 12, 0.13); }
-      if (bar === 0 && s === 0) riser(t, sd * 60, 0.09);
-      const m = PRE[st]; if (m) supersaw(m[0], t, m[1] * sd, 0.03, 2400);
+      if (!(bar === 3 && s >= 12) && s % every === 0) snare(t, 0.06 + (st / 64) * 0.18);
+      if (s === 0) { pad(pc, t, sd * 16, 0.032); bass808(pr, t, sd * 12, 0.14); }
+      if (s % 2 === 0) pluck(pc[(s / 2) % 3] + 12 + (bar >= 2 ? 12 : 0), t, 0.025, 0.05);
+      if (bar === 0 && s === 0) riser(t, sd * 60, 0.1);
+      const m = PRE[st]; if (m) supersaw(m[0], t, m[1] * sd, 0.034, 2600);
       // 마지막 박은 정적 → 드롭
-    } else if (sec === 'drop') {
+    } else {
+      const two = sec === 'drop2';
       if (bar === 0 && s === 0) crash(t);
-      if (s % 4 === 0) kick(t, 0.42, true);
-      if (s === 4 || s === 12) clap(t, 0.17);
-      hat(t, s % 4 === 2 ? 0.07 : 0.025, s % 4 === 2);
-      if ([0, 3, 6, 8, 11, 14].includes(s)) bass808(root, t, sd * (s % 8 === 0 ? 3 : 2), 0.2, s === 8 ? root + 12 : 0);
-      if (s === 2 || s === 6 || s === 10 || s === 14) stab(ch.map((n) => n - 12), t, 0.025);
+      if (two && i4 === 0 && s === 0 && bar > 0) crash(t);
+      if (s % 4 === 0) kick(t, 0.44, true);
+      if (two && i4 === 3 && (s === 14 || s === 15)) kick(t, 0.32, true);
+      if (s === 4 || s === 12) { clap(t, 0.18); snare(t, 0.07); }
+      hat(t, s % 4 === 2 ? 0.075 : 0.03, s % 4 === 2);
+      if (two || hot) hat(t + sd / 2, 0.02);                        // 32분음표 반짝임
+      if (s % 4 === 2) bass808(root + 12, t, sd * 1.6, 0.18);
+      if (s === 0 || s === 8) bass808(root, t, sd * 2, 0.2, s === 8 ? root + 7 : 0);
+      if (s === 2 || s === 6 || s === 10 || s === 14) stab(ch.map((n) => n - 12), t, 0.026);
+      pluck(ch[s % 3] + 24, t, two ? 0.022 : 0.014, 0.05);          // 반짝이는 16분음표 아르페지오
+      if (i4 % 2 === 1 && s === 14) chant(ch, t, 0.05);
       const hook = bar < 4 ? HOOK_A : HOOK_B;
       const m = hook[st];
       if (m) {
-        supersaw(m[0], t, m[1] * sd, 0.05, 3200);
-        if (hot) supersaw(m[0] + 12, t, m[1] * sd, 0.022, 4500); // 긴장도 높으면 옥타브 더블링
+        supersaw(m[0], t, m[1] * sd, 0.052, 3600);
+        if (two || hot) supersaw(m[0] + 12, t, m[1] * sd, 0.024, 5000); // 드롭2: 옥타브 위로 더블링
       }
     }
   }
@@ -417,7 +432,7 @@
 
   const TRACKS = {
     title: { bpm: 100, sections: [['main', 8]], loopFrom: 0, play: playTitle },
-    stage: { bpm: 128, sections: [['intro', 4], ['verse', 8], ['pre', 4], ['drop', 8]], loopFrom: 1, play: playStage },
+    stage: { bpm: 150, sections: [['intro', 2], ['verse', 4], ['pre', 4], ['drop', 8], ['drop2', 8]], loopFrom: 1, play: playStage },
     boss: { bpm: 170, sections: [['A', 4], ['B', 8], ['A', 4], ['B', 4]], loopFrom: 0, play: playBoss },
   };
 
