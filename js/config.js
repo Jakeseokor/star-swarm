@@ -66,9 +66,9 @@ SS.CONFIG = {
 
   // 적 3종
   ENEMY: {
-    grunt:     { hp: 1, radius: 11, speedMul: 1.0 },  // 일반형
+    grunt:     { hp: 1, radius: 12, speedMul: 1.0 },  // 일반형
     striker:   { hp: 1, radius: 10, speedMul: 1.45 }, // 돌격형 (빠름)
-    commander: { hp: 2, radius: 13, speedMul: 0.95 }, // 지휘관형 (2회 피격)
+    commander: { hp: 2, radius: 14, speedMul: 0.95 }, // 지휘관형 (2회 피격)
   },
   TURN_RATE: 3.6,              // 곡선 비행 선회력 (rad/s, 속도 150 기준)
 

@@ -330,7 +330,10 @@
       Gfx.ktext(ctx, '키보드: 방향키 이동 · Space 발사 · X 폭탄 · P 일시정지', W / 2, 532, 12, '#a9b6ff');
       Gfx.ktext(ctx, '1만 점마다 생명 +1 · 캡슐 D=2연발 S=쉴드 R=속사 B=폭탄', W / 2, 552, 12, '#a9b6ff');
       if (g.save.cleared) Gfx.text(ctx, '* ALL CLEAR *', W / 2, 576, { size: 2, color: '#ffd23a', align: 'center' });
-      Gfx.text(ctx, 'ORIGINAL GAME  V1.0', W / 2, H - 26, { size: 1, color: '#55608f', align: 'center' });
+      Gfx.text(ctx, 'ORIGINAL GAME  V1.2', W / 2, H - 26, { size: 1, color: '#55608f', align: 'center' });
+      if (SS.Audio.state() !== 'running' && Math.floor(t * 2) % 2 === 0) {
+        Gfx.ktext(ctx, '🔈 화면을 한 번 터치하면 소리가 켜집니다', W / 2, 602, 13, '#ffd23a');
+      }
     }
 
     drawSettingsInfo(ctx) {
@@ -359,7 +362,7 @@
       // 남은 기체
       if (!this.lifeIcon) this.lifeIcon = Gfx.makeSprite(SS.PLAYER_ART, SS.PLAYER_PALETTE, 1);
       const reserve = Math.max(0, g.lives - 1);
-      for (let i = 0; i < Math.min(reserve, 8); i++) ctx.drawImage(this.lifeIcon, 10 + i * 17, H - 18);
+      for (let i = 0; i < Math.min(reserve, 8); i++) ctx.drawImage(this.lifeIcon, 10 + i * 20, H - 23);
 
       // 스테이지 / 회차
       Gfx.text(ctx, (g.loop > 1 ? 'L' + g.loop + ' ' : '') + 'STAGE ' + g.stageNum, W - 10, H - 16, { size: 2, color: '#ffd23a', align: 'right' });
@@ -511,8 +514,8 @@
       const sy = 380 - Math.min(t, 3) * 20 + Math.sin(t * 2) * 4;
       ctx.drawImage(this.endShip, W / 2 - this.endShip.width / 2, sy - this.endShip.height / 2);
       ctx.fillStyle = Math.floor(t * 20) % 2 ? '#ffe14a' : '#ff8a2e';
-      ctx.fillRect(W / 2 - 11, sy + 18, 3, 8);
-      ctx.fillRect(W / 2 + 8, sy + 18, 3, 8);
+      ctx.fillRect(W / 2 - 6, sy + 30, 4, 10);
+      ctx.fillRect(W / 2 + 2, sy + 30, 4, 10);
 
       Gfx.text(ctx, 'SCORE ' + Gfx.pad(g.score), W / 2, 254, { size: 2, align: 'center' });
       Gfx.text(ctx, 'LOOP ' + g.loop + ' CLEAR', W / 2, 280, { size: 2, color: '#ffd23a', align: 'center' });

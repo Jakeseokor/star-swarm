@@ -32,19 +32,25 @@ for (let y = 0; y < G; y++) {
 [[6, 8, '#ffffff'], [55, 12, '#5ef2ff'], [12, 40, '#ffe14a'], [50, 46, '#ffffff'], [30, 5, '#ff8ad8'], [58, 30, '#ffffff'], [4, 56, '#9fb0ff'], [44, 58, '#ffe14a']]
   .forEach(([x, y, c]) => set(x, y, c));
 
-// 적(일반형) — 위쪽
-const GRUNT = mirror(['..Y...', '...Y..', '..GGGG', '.GGWGG', 'GGGKGG', 'G.GGGG', 'G.G...', '...GG.']);
-blit(GRUNT, { G: '#38d86b', Y: '#ffe14a', W: '#ffffff', K: '#14143a' }, 21, 4, 2);
+// 적 전투기 2대 — 위쪽 (아래를 향함)
+const ENEMY = mirror(['......K', '.....KG', '.....GC', '.....Gc', '....KGg', '...KGGg', '..KGGGg',
+  '.KGGGGg', 'KYGGGGg', 'KKKddGg', '....KGg', '...KGGd', '...KK.E']).reverse();
+const EPAL = { K: '#0f1e12', G: '#5fae4a', g: '#3a7a30', d: '#28502a', C: '#ffd75a', c: '#b07a18', Y: '#ffe14a', E: '#ff8a2e' };
+blit(ENEMY, EPAL, 8, 3, 1);
+blit(ENEMY, EPAL, 43, 7, 1);
 
-// 아군 탄
-for (let y = 21; y < 25; y++) { set(31, y, '#5ef2ff'); set(32, y, '#ffffff'); }
+// 예광탄
+for (let y = 12; y < 18; y++) { set(31, y, '#ffe14a'); set(32, y, '#ffffff'); }
 
-// 플레이어 기체 — 아래쪽 (13×12, 3배)
-const SHIP = [
-  '......W......', '......W......', '.....WCW.....', '.....WCW.....', '....WWCWW....', '..R.WBBBW.R..',
-  '..R.WBWBW.R..', '.RWWWWWWWWWR.', 'RWWBWWWWWBWWR', 'RW.BWWRWWB.WR', 'R...WRRRW...R', '....R...R....',
-];
-blit(SHIP, { W: '#f4f4ff', B: '#3a7bff', C: '#5ef2ff', R: '#ff3b4e' }, 13, 27, 3);
+// 플레이어 전투기 — 아래쪽 (17×21, 2배)
+const SHIP = mirror([
+  '........K', '.......KG', '.......GG', '.......Gg', '......KGC', '......GgC', '......Ggc',
+  '......Ggg', '.....KGgd', '....KGGgd', '...KGGGgd', '..KGGGGgd', '.KGGGGGgd', 'KRGGGGGgd',
+  'KRRdddGgd', '.KK...Kgd', '......Kgd', '.....KGgd', '....KGGgd', '...KRGdEd', '...KKK.E.',
+]);
+blit(SHIP, { K: '#141a28', G: '#d2dbe8', g: '#8a97ad', d: '#56627a', C: '#5ef2ff', c: '#1f7fa8', R: '#e8394a', E: '#3a3f4b' }, 15, 19, 2);
+// 애프터버너
+for (const x of [29, 30, 33, 34]) { set(x, 61, '#ffe14a'); set(x, 62, '#ff8a2e'); set(x, 63, '#ff8a2e'); }
 
 // ---- PNG 인코더 ----
 const CRC = new Uint32Array(256).map((_, n) => {

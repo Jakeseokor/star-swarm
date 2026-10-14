@@ -18,58 +18,53 @@
     return rows.map((r) => r + r.slice(0, -1).split('').reverse().join(''));
   }
 
-  // ---- 오리지널 픽셀아트 (아래쪽이 기체 앞) ----
+  // ---- 오리지널 픽셀아트: 위에서 내려다본 전투기 ----
+  // 왼쪽 절반+중앙 열만 적고 거울 복사. 위를 향하게 그린 뒤 뒤집어서 적기는 아래(플레이어 쪽)를 향함.
+  // K 외곽선, G/g/d 기체 명암, C/c 조종석 유리, E 엔진 노즐 불빛
+  const flip = (rows) => rows.slice().reverse();
   const ART = {
-    // 일반형 "드론": 더듬이 달린 초록 비행체
+    // 일반형: 녹색 위장 전투기
     grunt: {
-      pal: { G: '#38d86b', Y: '#ffe14a', W: '#ffffff', K: '#14143a' },
-      frames: [
-        mirror(['..Y...', '...Y..', '..GGGG', '.GGWGG', 'GGGKGG', 'G.GGGG', 'G.G...', '...GG.']),
-        mirror(['..Y...', '..Y...', '..GGGG', '.GGWGG', 'GGGKGG', '..GGGG', '.G.G..', 'G.....']),
+      half: ['......K', '.....KG', '.....GC', '.....Gc', '....KGg', '...KGGg', '..KGGGg',
+        '.KGGGGg', 'KYGGGGg', 'KKKddGg', '....KGg', '...KGGd', '...KK.E'],
+      pals: [
+        { K: '#0f1e12', G: '#5fae4a', g: '#3a7a30', d: '#28502a', C: '#ffd75a', c: '#b07a18', Y: '#ffe14a', E: '#ff8a2e' },
+        { K: '#0f1e12', G: '#5fae4a', g: '#3a7a30', d: '#28502a', C: '#ffd75a', c: '#b07a18', Y: '#6a5010', E: '#ffe14a' },
       ],
     },
-    // 돌격형 "다트": 날개를 편 붉은 화살촉
+    // 돌격형: 붉은 고속 요격기 (가늘고 날카로운 삼각익)
     striker: {
-      pal: { M: '#ff4fd8', R: '#ff2a3d', W: '#ffffff', O: '#ffa531' },
-      frames: [
-        mirror(['M.....', 'MM....', 'MRM...', '.MRRMM', '..MRRW', '...MRR', '....MO', '.....M']),
-        mirror(['......', 'M.....', 'MRM...', '.MRRMM', '..MRRW', '...MRR', '....MO', '.....M']),
+      half: ['.....K', '.....R', '....KR', '....RC', '....Rc', '...KRr', '...RRr', '..KRRr',
+        '.KRRRr', 'KRRRRr', 'KWKKRr', '...KRr', '..KRRr', '..KK.E'],
+      pals: [
+        { K: '#2a0a14', R: '#e8304a', r: '#981a2e', C: '#4ff0ff', c: '#1f7fa8', W: '#ffffff', E: '#ff8a2e' },
+        { K: '#2a0a14', R: '#e8304a', r: '#981a2e', C: '#4ff0ff', c: '#1f7fa8', W: '#ff4fd8', E: '#ffe14a' },
       ],
     },
-    // 지휘관형 "워든": 껍질을 두른 보라 기체 (피격 시 파랗게 변함)
+    // 지휘관형: 4발 엔진 중폭격기 (2회 피격, 피격되면 연기를 뿜음)
     commander: {
-      pal: { A: '#ffb02e', P: '#9b5cff', W: '#ffffff', K: '#14143a' },
-      hurtPal: { A: '#ffe14a', P: '#3fa4ff', W: '#ffffff', K: '#14143a' },
-      frames: [
-        mirror(['.....A.', '...AAPP', '..APPPP', '.APPWPP', 'APPPKPP', 'APAPPPP', 'A..APPA', 'A...A..', '....A..']),
-        mirror(['.....A.', '...AAPP', '..APPPP', '.APPWPP', 'APPPKPP', '.AAPPPP', '...APPA', '..A.A..', '.A.....']),
+      half: ['........K', '.......KP', '.......PC', '.......Pc', '......KPp', 'KKKKKKPPp',
+        'KAPPPPPPp', '.KKEKKEPp', '......KPp', '......KPp', '....KKPPp', '....KAAKE'],
+      pals: [
+        { K: '#140c26', P: '#8f5cf0', p: '#55309e', C: '#ffd75a', c: '#b07a18', A: '#ffb02e', E: '#ff6a2e' },
+        { K: '#140c26', P: '#8f5cf0', p: '#55309e', C: '#ffd75a', c: '#b07a18', A: '#ffe7a0', E: '#ffe14a' },
+      ],
+      hurtPals: [
+        { K: '#140c26', P: '#6a6f80', p: '#40444f', C: '#ff5a3a', c: '#802010', A: '#ff8a2e', E: '#ff3b1e' },
+        { K: '#140c26', P: '#6a6f80', p: '#40444f', C: '#ff5a3a', c: '#802010', A: '#ffb02e', E: '#ffe14a' },
       ],
     },
   };
 
-  // 보스 "하이브 마더" (31×18)
-  const BOSS_ART = mirror([
-    '..........AAAAAA',
-    '.......AAAPPPPPP',
-    '.....AAPPPPPPPPP',
-    '....APPPPWWPPPPP',
-    '...APPPPWKKWPPPP',
-    '..APPPPPPWWPPPPC',
-    '.APPRRPPPPPPPPCC',
-    'APPRYYRPPPPPPCCC',
-    'APRYYYYRPPPPPCWC',
-    'APPRYYRPPPPPPCCC',
-    'APPPRRPPPAAPPPCC',
-    '.APPPPPPA..APPPC',
-    '..AAPPPA....APPP',
-    '...A.AA.....APAP',
-    '..A..A.......A.A',
-    '.A..A........A..',
-    '....A.........A.',
-    '...............A',
-  ]);
-  const BOSS_PAL = { A: '#ff8a2e', P: '#7a3cff', W: '#ffffff', K: '#ff2040', R: '#ff3b6b', Y: '#ffe14a', C: '#4ff0ff' };
-  const BOSS_RAGE_PAL = Object.assign({}, BOSS_PAL, { P: '#c0205a', A: '#ffd23a' });
+  // 보스 "하이브 마더": 포탑을 단 초대형 공중요새 (31×19)
+  const BOSS_ART = flip(mirror([
+    '...............K', '..............KG', '..............GC', '..............Gc', '.............KGG',
+    '.............GGg', '......KKKKKKKGGg', '...KKKGGGGGGGGGg', '.KKGGGGGGGGGGGGg', 'KRGGGGTGGGGTGGGg',
+    'KRRGGGGGGGGGGGGg', '.KKdEdKKdEdKKGGg', '...KEK..KEK.KGGg', '............KGGg', '...........KGGGg',
+    '........KKKGGGGg', '......KRGGGGGGGg', '.......KKKKKKdEd', '..............E.',
+  ]));
+  const BOSS_PAL = { K: '#0c1020', G: '#6f7e96', g: '#424e62', d: '#2a3242', C: '#ff2040', c: '#8a1020', R: '#e8394a', T: '#ffd23a', E: '#ff8a2e' };
+  const BOSS_RAGE_PAL = Object.assign({}, BOSS_PAL, { G: '#8e5260', g: '#5a2a36', R: '#ff6a2e', T: '#ff3b4e', E: '#ffe14a' });
 
   let SPR = null;
   function sprites() {
@@ -78,10 +73,11 @@
     SPR = {};
     for (const type in ART) {
       const a = ART[type];
+      const rows = flip(mirror(a.half));
       SPR[type] = {
-        frames: a.frames.map((f) => G.makeSprite(f, a.pal, 2)),
-        flash: a.frames.map((f) => G.makeSprite(f, a.pal, 2, '#ffffff')),
-        hurt: a.hurtPal ? a.frames.map((f) => G.makeSprite(f, a.hurtPal, 2)) : null,
+        frames: a.pals.map((p) => G.makeSprite(rows, p, 2)),
+        flash: a.pals.map((p) => G.makeSprite(rows, p, 2, '#ffffff')),
+        hurt: a.hurtPals ? a.hurtPals.map((p) => G.makeSprite(rows, p, 2)) : null,
       };
     }
     SPR.boss = {
@@ -226,6 +222,23 @@
         default:
           this.followPath(dt, game);
           if (this.state === 'diving') this.updateDiveFire(dt, game);
+      }
+
+      // 비행운(급강하·진입 중) / 손상된 폭격기의 연기
+      this.trailT = (this.trailT || 0) - dt;
+      if (this.trailT <= 0 && this.y > -10) {
+        const damaged = this.type === 'commander' && this.hp === 1;
+        if (damaged) {
+          this.trailT = 0.07;
+          game.smoke(this.x + (Math.random() - 0.5) * 10, this.y - 4, 1, '#4a4e58');
+          if (Math.random() < 0.4) game.spark(this.x, this.y, '#ff8a2e');
+        } else if (this.state === 'diving' || this.state === 'entering') {
+          this.trailT = 0.05;
+          const bx = -Math.cos(this.heading) * 10, by = -Math.sin(this.heading) * 10;
+          game.trail(this.x + bx, this.y + by);
+        } else {
+          this.trailT = 0.2;
+        }
       }
 
       // 스프라이트 회전은 부드럽게 따라감
@@ -467,8 +480,8 @@
       if (this.state === 'dying') { x += Math.round(rand(-3, 3)); y += Math.round(rand(-3, 3)); }
       // 엔진 광원
       const glow = 0.3 + Math.sin(time * 9) * 0.15;
-      ctx.fillStyle = `rgba(79, 240, 255, ${glow})`;
-      ctx.fillRect(x - 6, y - 34, 12, 8);
+      ctx.fillStyle = `rgba(255, 138, 46, ${glow})`;
+      ctx.fillRect(x - 6, y - 36, 12, 8);
       ctx.drawImage(img, x - img.width / 2, y - img.height / 2);
     }
   }

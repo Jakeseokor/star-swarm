@@ -36,7 +36,7 @@
 
       document.addEventListener('pointerdown', (e) => this.onDown(e), opt);
       document.addEventListener('pointermove', (e) => this.onMove(e), opt);
-      document.addEventListener('pointerup', (e) => this.onUp(e), opt);
+      document.addEventListener('pointerup', (e) => { SS.Audio.unlock(); this.onUp(e); }, opt);
       document.addEventListener('pointercancel', (e) => this.onUp(e), opt);
 
       // 사파리 바운스·확대·롱프레스 메뉴·텍스트 선택 차단

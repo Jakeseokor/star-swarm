@@ -63,10 +63,13 @@
     drawPlayer(ctx, list) {
       for (const b of list) {
         const x = Math.round(b.x), y = Math.round(b.y);
-        ctx.fillStyle = '#5ef2ff';
-        ctx.fillRect(x - 1, y - 6, 3, 11);
+        // 예광탄: 꼬리가 긴 노란 탄
+        ctx.fillStyle = 'rgba(255, 170, 40, 0.55)';
+        ctx.fillRect(x - 1, y - 2, 3, 14);
+        ctx.fillStyle = '#ffe14a';
+        ctx.fillRect(x - 1, y - 7, 3, 9);
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x, y - 5, 1, 7);
+        ctx.fillRect(x, y - 7, 1, 5);
       }
     },
 
@@ -74,17 +77,17 @@
       const blink = Math.floor(time * 12) % 2 === 0;
       for (const b of list) {
         const x = Math.round(b.x), y = Math.round(b.y);
-        if (b.style === 1) { // 보스 탄: 둥근 오브
-          ctx.fillStyle = blink ? '#ffb02e' : '#ff5a1f';
+        if (b.style === 1) { // 보스 탄: 분홍 플라스마 탄
+          ctx.fillStyle = blink ? '#ff4fd8' : '#c0208a';
           ctx.fillRect(x - 3, y - 4, 6, 8);
           ctx.fillRect(x - 4, y - 3, 8, 6);
           ctx.fillStyle = '#fff6c0';
           ctx.fillRect(x - 1, y - 2, 2, 4);
-        } else { // 일반 탄: 마름모
-          ctx.fillStyle = blink ? '#ff4fd8' : '#ffffff';
-          ctx.fillRect(x - 1, y - 4, 2, 8);
-          ctx.fillRect(x - 3, y - 1, 6, 2);
-          ctx.fillStyle = blink ? '#ffffff' : '#ff4fd8';
+        } else { // 일반 탄: 붉게 달아오른 기관포탄
+          ctx.fillStyle = blink ? '#ff3b1e' : '#ff8a2e';
+          ctx.fillRect(x - 2, y - 3, 4, 6);
+          ctx.fillRect(x - 3, y - 2, 6, 4);
+          ctx.fillStyle = '#fff2c0';
           ctx.fillRect(x - 1, y - 1, 2, 2);
         }
       }

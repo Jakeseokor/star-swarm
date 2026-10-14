@@ -66,6 +66,7 @@
       this.hits = 0;
       this.deaths = 0;
       this.stars = this.makeStars();
+      this.clouds = this.makeClouds();
       this.showFps = /debug/.test(location.search);
       this.fps = 60;
 
@@ -277,6 +278,26 @@
       if (this.particles.length > 600) this.particles.splice(0, this.particles.length - 600);
     }
 
+    // 연기 (점점 커지며 옅어짐)
+    smoke(x, y, n, color) {
+      for (let i = 0; i < (n || 1); i++) {
+        this.particles.push({
+          x: x + rand(-4, 4), y: y + rand(-4, 4), vx: rand(-15, 15), vy: rand(-10, 25),
+          life: rand(0.5, 0.9), max: 0.9, color: color || '#5a5f6b', size: 3, grow: 12,
+        });
+      }
+    }
+
+    // 비행운
+    trail(x, y) {
+      if (this.particles.length > 520) return;
+      this.particles.push({ x, y, vx: 0, vy: 20, life: 0.35, max: 0.5, color: '#9aa6bd', size: 2, grow: 5 });
+    }
+
+    spark(x, y, color) {
+      this.particles.push({ x, y, vx: rand(-40, 40), vy: rand(-60, 10), life: 0.3, max: 0.3, color: color || '#ffd23a', size: 2 });
+    }
+
     popup(x, y, text, color) {
       this.popups.push({ x, y, text: String(text), color: color || '#ffffff', life: 0.9 });
     }
@@ -284,6 +305,38 @@
     clearEnemyBullets() {
       for (const b of this.eBullets) this.explode(b.x, b.y, ['#ffffff'], 2, 40, 0.3);
       this.eBullets.length = 0;
+    }
+
+    // 픽셀 구름 이미지 (절차적 생성) + 2개 층 (먼 층은 느리게, 가까운 층은 빠르게)
+    makeClouds() {
+      const imgs = [];
+      for (let k = 0; k < 5; k++) {
+        const cw = 96 + Math.floor(Math.random() * 64), ch = 36 + Math.floor(Math.random() * 20), cell = 4;
+        const cv = document.createElement('canvas');
+        cv.width = cw; cv.height = ch;
+        const g = cv.getContext('2d');
+        const blobs = [];
+        for (let i = 0; i < 6; i++) blobs.push([rand(cw * 0.2, cw * 0.8), rand(ch * 0.35, ch * 0.65), rand(ch * 0.25, ch * 0.5)]);
+        for (let y = 0; y < ch; y += cell) {
+          for (let x = 0; x < cw; x += cell) {
+            let inside = 0;
+            for (const [bx, by, br] of blobs) if ((x - bx) ** 2 + (y - by) ** 2 < br * br) inside++;
+            if (!inside) continue;
+            g.fillStyle = inside > 2 ? '#e8eefa' : inside > 1 ? '#c2cde3' : '#93a1bf';
+            g.fillRect(x, y, cell, cell);
+          }
+        }
+        imgs.push(cv);
+      }
+      const list = [];
+      for (let i = 0; i < 7; i++) {
+        const near = i >= 4;
+        list.push({
+          img: imgs[i % imgs.length], x: rand(-60, W), y: rand(-80, H),
+          speed: near ? rand(120, 160) : rand(45, 70), scale: near ? 1.6 : 1, alpha: near ? 0.16 : 0.1,
+        });
+      }
+      return list;
     }
 
     makeStars() {
@@ -314,6 +367,21 @@
         s.y += s.speed * dt * warp;
         if (s.y > H) { s.y -= H; s.x = Math.random() * W; }
       }
+      for (const c of this.clouds) {
+        c.y += c.speed * dt * warp;
+        if (c.y > H) { c.y = -c.img.height * c.scale - rand(0, 120); c.x = rand(-60, W - 40); }
+      }
+
+      // 전투 긴장도 → 배경음악 레이어 (급강하 수, 적 탄 수, 보스, 마지막 기체)
+      let inten = 0;
+      if (this.state === 'playing' && this.stage) {
+        const st = this.stage;
+        let div = 0;
+        for (const e of st.enemies) if (e.state === 'diving') div++;
+        inten = div * 0.22 + Math.min(0.4, this.eBullets.length * 0.03)
+          + (st.warningStarted || st.bossSpawned ? 0.5 : 0) + (this.lives === 1 ? 0.25 : 0);
+      }
+      SS.Audio.setIntensity(inten);
 
       this.ui.update(dt);
 
@@ -429,6 +497,7 @@
         q.vx *= 0.97;
         q.vy *= 0.97;
         q.life -= dt;
+        if (q.grow) q.size += q.grow * dt;
         if (q.life > 0) this.particles[n++] = q;
       }
       this.particles.length = n;
@@ -541,7 +610,10 @@
       const pts = C.SCORE[e.type][diving ? 'diving' : 'formation'];
       this.addScore(pts);
       if (diving) this.popup(e.x, e.y, pts, '#ffffff');
-      this.explode(e.x, e.y, ENEMY_COLORS[e.type], 16, 130);
+      this.explode(e.x, e.y, ['#ffffff', '#ffe14a', '#ff8a2e', '#ff3b1e'], 12, 150, 0.45);
+      this.explode(e.x, e.y, ENEMY_COLORS[e.type], 10, 110, 0.7);
+      this.smoke(e.x, e.y, e.type === 'commander' ? 7 : 4);
+      this.shake = Math.max(this.shake, e.type === 'commander' ? 0.18 : 0.08);
       SS.Audio.play('enemyDie');
       const P = C.POWERUP;
       const chance = P.dropChance + (diving ? P.divingDropBonus : 0);
@@ -562,7 +634,8 @@
       this.bombs = Math.max(this.bombs, C.BOMB.minAfterDeath);
       this.deaths++;
       this.shake = 0.5;
-      this.explode(p.x, p.y, ['#ffffff', '#ff3b4e', '#ffe14a', '#3a7bff'], 40, 200, 1.0);
+      this.explode(p.x, p.y, ['#ffffff', '#ff3b4e', '#ffe14a', '#d2dbe8'], 40, 200, 1.0);
+      this.smoke(p.x, p.y, 12, '#3e434e');
       SS.Audio.play('playerDie');
     }
 
@@ -570,10 +643,16 @@
     render() {
       const ctx = this.ctx, cv = this.canvas;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#03030f';
-      ctx.fillRect(0, 0, cv.width, cv.height);
       ctx.setTransform(cv.width / W, 0, 0, cv.height / H, 0, 0);
       ctx.imageSmoothingEnabled = false;
+      if (!this.sky) {
+        this.sky = ctx.createLinearGradient(0, 0, 0, H);
+        this.sky.addColorStop(0, '#02030e');
+        this.sky.addColorStop(0.55, '#07122e');
+        this.sky.addColorStop(1, '#0d2448');
+      }
+      ctx.fillStyle = this.sky;
+      ctx.fillRect(0, 0, W, H);
 
       ctx.save();
       if (this.shake > 0) ctx.translate(Math.round(rand(-4, 4) * this.shake * 2), Math.round(rand(-4, 4) * this.shake * 2));
@@ -583,6 +662,11 @@
         ctx.fillStyle = s.color;
         ctx.fillRect(Math.round(s.x), Math.round(s.y), s.size, s.size);
       }
+      for (const c of this.clouds) {
+        ctx.globalAlpha = c.alpha;
+        ctx.drawImage(c.img, Math.round(c.x), Math.round(c.y), c.img.width * c.scale, c.img.height * c.scale);
+      }
+      ctx.globalAlpha = 1;
 
       if (this.stage && WORLD_STATES.includes(this.state)) this.drawWorld(ctx);
       ctx.restore();
@@ -635,7 +719,8 @@
       for (const q of this.particles) {
         ctx.globalAlpha = Math.max(0, Math.min(1, q.life / q.max * 1.5));
         ctx.fillStyle = q.color;
-        ctx.fillRect(Math.round(q.x), Math.round(q.y), q.size, q.size);
+        const sz = Math.round(q.size);
+        ctx.fillRect(Math.round(q.x - (q.grow ? sz / 2 : 0)), Math.round(q.y - (q.grow ? sz / 2 : 0)), sz, sz);
       }
       ctx.globalAlpha = 1;
       for (const p of this.popups) {

@@ -5,22 +5,14 @@
   const C = SS.CONFIG;
   const P = C.PLAYER;
 
-  // 오리지널 픽셀아트 (13×12). W 흰색, B 파랑, C 시안(조종석), R 빨강
+  // 오리지널 픽셀아트: 위에서 본 쌍발 제공 전투기 (17×21)
+  // 왼쪽 절반+중앙 열만 적고 거울 복사. K 외곽선, G/g/d 기체 명암, C/c 캐노피, R 날개 표식, E 엔진 노즐
   SS.PLAYER_ART = [
-    '......W......',
-    '......W......',
-    '.....WCW.....',
-    '.....WCW.....',
-    '....WWCWW....',
-    '..R.WBBBW.R..',
-    '..R.WBWBW.R..',
-    '.RWWWWWWWWWR.',
-    'RWWBWWWWWBWWR',
-    'RW.BWWRWWB.WR',
-    'R...WRRRW...R',
-    '....R...R....',
-  ];
-  SS.PLAYER_PALETTE = { W: '#f4f4ff', B: '#3a7bff', C: '#5ef2ff', R: '#ff3b4e' };
+    '........K', '.......KG', '.......GG', '.......Gg', '......KGC', '......GgC', '......Ggc',
+    '......Ggg', '.....KGgd', '....KGGgd', '...KGGGgd', '..KGGGGgd', '.KGGGGGgd', 'KRGGGGGgd',
+    'KRRdddGgd', '.KK...Kgd', '......Kgd', '.....KGgd', '....KGGgd', '...KRGdEd', '...KKK.E.',
+  ].map((r) => r + r.slice(0, -1).split('').reverse().join(''));
+  SS.PLAYER_PALETTE = { K: '#141a28', G: '#d2dbe8', g: '#8a97ad', d: '#56627a', C: '#5ef2ff', c: '#1f7fa8', R: '#e8394a', E: '#3a3f4b' };
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 
@@ -72,6 +64,7 @@
       if (this.double > 0) this.double = Math.max(0, this.double - dt);
       if (this.rapid > 0) this.rapid = Math.max(0, this.rapid - dt);
       if (this.cool > 0) this.cool -= dt;
+      if (this.muzzle > 0) this.muzzle -= dt;
 
       const drag = inp.takeDrag(); // 죽어 있어도 누적분은 버림
       if (!this.alive) return;
@@ -94,11 +87,12 @@
 
     fire() {
       this.cool = this.rapid > 0 ? P.rapidCooldown : P.fireCooldown;
+      this.muzzle = 0.06;
       if (this.double > 0) {
-        SS.Bullet.player(this.game, this.x - 7, this.y - 8);
-        SS.Bullet.player(this.game, this.x + 7, this.y - 8);
+        SS.Bullet.player(this.game, this.x - 9, this.y - 6);
+        SS.Bullet.player(this.game, this.x + 9, this.y - 6);
       } else {
-        SS.Bullet.player(this.game, this.x, this.y - 14);
+        SS.Bullet.player(this.game, this.x, this.y - 22);
       }
       SS.Audio.play('shoot');
     }
@@ -110,17 +104,36 @@
       const blinkOff = this.invuln > 0 && Math.floor(time * 16) % 2 === 0;
 
       if (!blinkOff) {
-        // 엔진 불꽃 (전진 중엔 길게, 후진 중엔 짧게)
+        const w = this.sprite.width, h = this.sprite.height;
+        // 애프터버너 (전진 중엔 길게, 후진 중엔 짧게)
         const f = Math.floor(time * 30) % 3;
-        const len = 3 + f + (this.vy < -20 ? 5 : this.vy > 20 ? -2 : 0);
-        ctx.fillStyle = f === 0 ? '#ffe14a' : '#ff8a2e';
-        ctx.fillRect(x - 7, y + 12, 2, len);
-        ctx.fillRect(x + 5, y + 12, 2, len);
-        ctx.drawImage(this.sprite, x - 13, y - 12);
+        const len = 5 + f * 2 + (this.vy < -20 ? 8 : this.vy > 20 ? -3 : 0);
+        const ny = y + h / 2 - 2;
+        for (const nx of [x - 3, x + 1]) {
+          ctx.fillStyle = 'rgba(255, 120, 40, 0.75)';
+          ctx.fillRect(nx - 1, ny, 4, len);
+          ctx.fillStyle = '#ffe14a';
+          ctx.fillRect(nx, ny, 2, Math.max(2, len - 3));
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(nx, ny, 2, 2);
+        }
+        ctx.drawImage(this.sprite, x - w / 2, y - h / 2);
+        // 기관포 발사 섬광
+        if (this.muzzle > 0) {
+          ctx.fillStyle = '#fff6c0';
+          if (this.double > 0) {
+            ctx.fillRect(x - 11, y - 10, 4, 4);
+            ctx.fillRect(x + 7, y - 10, 4, 4);
+          } else {
+            ctx.fillRect(x - 2, y - 26, 4, 5);
+            ctx.fillStyle = '#ffd23a';
+            ctx.fillRect(x - 4, y - 24, 8, 2);
+          }
+        }
       }
 
       if (this.shield) {
-        const r = 20 + Math.sin(time * 8) * 1.5;
+        const r = 25 + Math.sin(time * 8) * 1.5;
         ctx.strokeStyle = `rgba(79, 240, 255, ${0.55 + Math.sin(time * 10) * 0.25})`;
         ctx.lineWidth = 2;
         ctx.beginPath();
