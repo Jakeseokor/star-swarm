@@ -3,7 +3,8 @@
 (function () {
   const SS = window.SS;
   const C = SS.CONFIG;
-  const W = C.WIDTH;
+  let W = C.WIDTH;
+  SS.onView(() => { W = C.WIDTH; });
 
   function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
 
@@ -15,8 +16,12 @@
     [{ x: -30, y: 250 }, { x: 140, y: 300 }, { x: 260, y: 330 }, { x: 340, y: 270 }, { x: 300, y: 190 }],
   ];
 
+  // 경로는 기준 폭(480) 좌표 → 넓은 화면(가로 모드)에서는 가운데로 옮기고 높이도 화면에 맞춤
   function pathFor(index, mirrored) {
-    return ENTRY_PATHS[index % ENTRY_PATHS.length].map((p) => ({ x: mirrored ? W - p.x : p.x, y: p.y }));
+    const bw = C.BASE_W, ox = (W - bw) / 2, ky = Math.max(1, C.HEIGHT / C.BASE_H);
+    return ENTRY_PATHS[index % ENTRY_PATHS.length].map((p) => ({
+      x: ox + (mirrored ? bw - p.x : p.x), y: p.y < 0 ? p.y : p.y * ky,
+    }));
   }
 
   // 상단 편대: 좌우로 흔들리며 수축·팽창
@@ -36,7 +41,7 @@
       return W / 2 + this.ox + (col - (count - 1) / 2) * C.FORMATION.colSpacing * this.spread;
     }
     slotY(row) {
-      return C.FORMATION.top + row * C.FORMATION.rowSpacing * (1 + (this.spread - 1) * 0.6);
+      return C.FORMATION.top + SS.view.safeTop + row * C.FORMATION.rowSpacing * (1 + (this.spread - 1) * 0.6);
     }
   }
 
@@ -200,8 +205,13 @@
       return this.enemies.length === 0;
     }
 
+    drawShadows(ctx) {
+      if (this.boss) this.boss.drawShadow(ctx);
+      for (const e of this.enemies) e.drawShadow(ctx);
+    }
+
     draw(ctx, time) {
-      for (const e of this.enemies) e.draw(ctx);
+      for (const e of this.enemies) e.draw(ctx, time);
       if (this.boss) this.boss.draw(ctx, time);
     }
   }

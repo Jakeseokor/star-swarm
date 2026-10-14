@@ -3,7 +3,8 @@
 (function () {
   const SS = window.SS;
   const C = SS.CONFIG;
-  const W = C.WIDTH, H = C.HEIGHT;
+  let W = C.WIDTH, H = C.HEIGHT;
+  SS.onView(() => { W = C.WIDTH; H = C.HEIGHT; });
   const PI = Math.PI, HALF_PI = PI / 2, TAU = PI * 2;
 
   function rand(a, b) { return a + Math.random() * (b - a); }
@@ -18,75 +19,7 @@
     return rows.map((r) => r + r.slice(0, -1).split('').reverse().join(''));
   }
 
-  // ---- 오리지널 픽셀아트: 위에서 내려다본 전투기 ----
-  // 왼쪽 절반+중앙 열만 적고 거울 복사. 위를 향하게 그린 뒤 뒤집어서 적기는 아래(플레이어 쪽)를 향함.
-  // K 외곽선, G/g/d 기체 명암, C/c 조종석 유리, E 엔진 노즐 불빛
-  const flip = (rows) => rows.slice().reverse();
-  const ART = {
-    // 일반형: 녹색 위장 전투기
-    grunt: {
-      half: ['......K', '.....KG', '.....GC', '.....Gc', '....KGg', '...KGGg', '..KGGGg',
-        '.KGGGGg', 'KYGGGGg', 'KKKddGg', '....KGg', '...KGGd', '...KK.E'],
-      pals: [
-        { K: '#0f1e12', G: '#5fae4a', g: '#3a7a30', d: '#28502a', C: '#ffd75a', c: '#b07a18', Y: '#ffe14a', E: '#ff8a2e' },
-        { K: '#0f1e12', G: '#5fae4a', g: '#3a7a30', d: '#28502a', C: '#ffd75a', c: '#b07a18', Y: '#6a5010', E: '#ffe14a' },
-      ],
-    },
-    // 돌격형: 붉은 고속 요격기 (가늘고 날카로운 삼각익)
-    striker: {
-      half: ['.....K', '.....R', '....KR', '....RC', '....Rc', '...KRr', '...RRr', '..KRRr',
-        '.KRRRr', 'KRRRRr', 'KWKKRr', '...KRr', '..KRRr', '..KK.E'],
-      pals: [
-        { K: '#2a0a14', R: '#e8304a', r: '#981a2e', C: '#4ff0ff', c: '#1f7fa8', W: '#ffffff', E: '#ff8a2e' },
-        { K: '#2a0a14', R: '#e8304a', r: '#981a2e', C: '#4ff0ff', c: '#1f7fa8', W: '#ff4fd8', E: '#ffe14a' },
-      ],
-    },
-    // 지휘관형: 4발 엔진 중폭격기 (2회 피격, 피격되면 연기를 뿜음)
-    commander: {
-      half: ['........K', '.......KP', '.......PC', '.......Pc', '......KPp', 'KKKKKKPPp',
-        'KAPPPPPPp', '.KKEKKEPp', '......KPp', '......KPp', '....KKPPp', '....KAAKE'],
-      pals: [
-        { K: '#140c26', P: '#8f5cf0', p: '#55309e', C: '#ffd75a', c: '#b07a18', A: '#ffb02e', E: '#ff6a2e' },
-        { K: '#140c26', P: '#8f5cf0', p: '#55309e', C: '#ffd75a', c: '#b07a18', A: '#ffe7a0', E: '#ffe14a' },
-      ],
-      hurtPals: [
-        { K: '#140c26', P: '#6a6f80', p: '#40444f', C: '#ff5a3a', c: '#802010', A: '#ff8a2e', E: '#ff3b1e' },
-        { K: '#140c26', P: '#6a6f80', p: '#40444f', C: '#ff5a3a', c: '#802010', A: '#ffb02e', E: '#ffe14a' },
-      ],
-    },
-  };
-
-  // 보스 "하이브 마더": 포탑을 단 초대형 공중요새 (31×19)
-  const BOSS_ART = flip(mirror([
-    '...............K', '..............KG', '..............GC', '..............Gc', '.............KGG',
-    '.............GGg', '......KKKKKKKGGg', '...KKKGGGGGGGGGg', '.KKGGGGGGGGGGGGg', 'KRGGGGTGGGGTGGGg',
-    'KRRGGGGGGGGGGGGg', '.KKdEdKKdEdKKGGg', '...KEK..KEK.KGGg', '............KGGg', '...........KGGGg',
-    '........KKKGGGGg', '......KRGGGGGGGg', '.......KKKKKKdEd', '..............E.',
-  ]));
-  const BOSS_PAL = { K: '#0c1020', G: '#6f7e96', g: '#424e62', d: '#2a3242', C: '#ff2040', c: '#8a1020', R: '#e8394a', T: '#ffd23a', E: '#ff8a2e' };
-  const BOSS_RAGE_PAL = Object.assign({}, BOSS_PAL, { G: '#8e5260', g: '#5a2a36', R: '#ff6a2e', T: '#ff3b4e', E: '#ffe14a' });
-
-  let SPR = null;
-  function sprites() {
-    if (SPR) return SPR;
-    const G = SS.Gfx;
-    SPR = {};
-    for (const type in ART) {
-      const a = ART[type];
-      const rows = flip(mirror(a.half));
-      SPR[type] = {
-        frames: a.pals.map((p) => G.makeSprite(rows, p, 2)),
-        flash: a.pals.map((p) => G.makeSprite(rows, p, 2, '#ffffff')),
-        hurt: a.hurtPals ? a.hurtPals.map((p) => G.makeSprite(rows, p, 2)) : null,
-      };
-    }
-    SPR.boss = {
-      normal: G.makeSprite(BOSS_ART, BOSS_PAL, 3),
-      rage: G.makeSprite(BOSS_ART, BOSS_RAGE_PAL, 3),
-      flash: G.makeSprite(BOSS_ART, BOSS_PAL, 3, '#ffffff'),
-    };
-    return SPR;
-  }
+  // 기체 그래픽은 aircraft.js (SS.Aircraft) — 벡터로 그린 전투기·폭격기·공중요새
 
   // ======================= 일반 적 =======================
   class Enemy {
@@ -313,22 +246,29 @@
       }
     }
 
-    draw(ctx) {
+    drawShadow(ctx) {
+      if (!this.active || this.y < -40) return;
+      SS.Aircraft.drawShadow(ctx, this.type, this.x, this.y, this.rot, this.state === 'formation' ? 26 : 20);
+    }
+
+    draw(ctx, time) {
       if (!this.active) return;
-      const spr = sprites()[this.type];
-      const frame = Math.floor(this.anim * (this.state === 'formation' ? 2.5 : 6)) % 2;
-      let img = spr.frames[frame];
-      if (this.flash > 0) img = spr.flash[frame];
-      else if (spr.hurt && this.hp === 1) img = spr.hurt[frame];
-      ctx.save();
-      ctx.translate(Math.round(this.x), Math.round(this.y));
-      if (this.rot) ctx.rotate(this.rot);
-      ctx.drawImage(img, -img.width / 2, -img.height / 2);
-      ctx.restore();
+      // 엔진 불빛 (기수 반대쪽)
+      const back = this.rot + Math.PI / 2 + Math.PI;
+      const len = this.type === 'commander' ? 0 : this.type === 'striker' ? 20 : 18;
+      if (len) {
+        const ex = this.x + Math.cos(back) * len, ey = this.y + Math.sin(back) * len;
+        const s = (this.state === 'formation' ? 7 : 11) * (0.85 + Math.sin(time * 37 + this.anim) * 0.15);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.drawImage(SS.FX.sprite('fire'), ex - s / 2, ey - s / 2, s, s);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      SS.Aircraft.draw(ctx, this.type, this.x, this.y, this.rot, {
+        hurt: this.type === 'commander' && this.hp === 1,
+        flash: this.flash > 0,
+      });
     }
   }
-
-  Enemy.sprites = sprites;
 
   // ======================= 보스 =======================
   class Boss {
@@ -338,7 +278,7 @@
       this.hp = this.maxHp;
       this.x = W / 2;
       this.y = -70;
-      this.homeY = C.BOSS.y;
+      this.homeY = C.BOSS.y + SS.view.safeTop;
       this.state = 'enter'; // enter → fight → dying → dead
       this.t = 0;
       this.phase = 1;
@@ -347,8 +287,8 @@
       this.dead = false;
       this.dieT = 0;
       this.boomT = 0;
-      this.hw = 44;
-      this.hh = 25;
+      this.hw = 74;
+      this.hh = 30;
       this.resetTimers();
     }
 
@@ -394,7 +334,7 @@
         game.shake = Math.max(game.shake, 0.2);
         if (this.boomT <= 0) {
           this.boomT = 0.09;
-          game.explode(this.x + rand(-40, 40), this.y + rand(-22, 22), ['#ffe14a', '#ff8a2e', '#ffffff', '#ff3b6b'], 10, 140);
+          game.explode(this.x + rand(-70, 70), this.y + rand(-26, 26), ['#ffe14a', '#ff8a2e', '#ffffff', '#ff3b6b'], 10, 140);
         }
         if (this.dieT > 2.2 && !this.dead) {
           this.dead = true;
@@ -419,7 +359,7 @@
       }
 
       const spd = C.BOSS.moveSpeed[this.phase] * this.stage.mul;
-      this.x = W / 2 + Math.sin(this.t * spd) * 140;
+      this.x = W / 2 + Math.sin(this.t * spd) * Math.min(W / 2 - 95, 230);
       this.y = this.homeY + Math.sin(this.t * spd * 2.1) * (this.phase === 3 ? 22 : 12);
 
       if (this.invuln > 0 || !game.player.alive) return;
@@ -465,24 +405,34 @@
         if ((T.b -= dt) <= 0) { T.b = 1.15; B.pattern(game, mx, my, 'barrage', 215); }
         if ((T.d -= dt) <= 0) {
           T.d = 5.5;
-          this.stage.spawnMinion(game, mx - 34, my);
-          this.stage.spawnMinion(game, mx + 34, my);
+          this.stage.spawnMinion(game, mx - 50, my);
+          this.stage.spawnMinion(game, mx + 50, my);
         }
       }
     }
 
+    drawShadow(ctx) {
+      if (this.dead) return;
+      SS.Aircraft.drawShadow(ctx, 'boss', this.x, this.y, 0, 40);
+    }
+
     draw(ctx, time) {
       if (this.dead) return;
-      const s = sprites().boss;
-      let img = this.phase === 3 ? s.rage : s.normal;
-      if (this.flash > 0 || (this.invuln > 0 && Math.floor(time * 20) % 2 === 0)) img = s.flash;
-      let x = Math.round(this.x), y = Math.round(this.y);
-      if (this.state === 'dying') { x += Math.round(rand(-3, 3)); y += Math.round(rand(-3, 3)); }
-      // 엔진 광원
-      const glow = 0.3 + Math.sin(time * 9) * 0.15;
-      ctx.fillStyle = `rgba(255, 138, 46, ${glow})`;
-      ctx.fillRect(x - 6, y - 36, 12, 8);
-      ctx.drawImage(img, x - img.width / 2, y - img.height / 2);
+      let x = this.x, y = this.y;
+      if (this.state === 'dying') { x += rand(-3, 3); y += rand(-3, 3); }
+      // 배기구 불빛 (꼬리 = 화면 위쪽)
+      const fire = SS.FX.sprite('fire');
+      const s = 16 + Math.sin(time * 30) * 2;
+      ctx.globalCompositeOperation = 'lighter';
+      for (const ox of [-24, 24]) ctx.drawImage(fire, x + ox - s / 2, y - 12 - s / 2, s, s);
+      ctx.globalCompositeOperation = 'source-over';
+      const flash = this.flash > 0 || (this.invuln > 0 && Math.floor(time * 20) % 2 === 0);
+      SS.Aircraft.draw(ctx, 'boss', x, y, 0, { hurt: this.phase === 3, flash });
+      if (this.state === 'dying') { // 불타는 연기
+        ctx.globalAlpha = 0.6;
+        ctx.drawImage(SS.FX.sprite('smoke'), x - 40 + rand(-10, 10), y - 30, 80, 60);
+        ctx.globalAlpha = 1;
+      }
     }
   }
 

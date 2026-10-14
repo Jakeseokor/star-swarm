@@ -3,7 +3,8 @@
 (function () {
   const SS = window.SS;
   const C = SS.CONFIG;
-  const W = C.WIDTH, H = C.HEIGHT;
+  let W = C.WIDTH, H = C.HEIGHT;
+  SS.onView(() => { W = C.WIDTH; H = C.HEIGHT; });
   const HALF_PI = Math.PI / 2;
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -61,38 +62,69 @@
     },
 
     drawPlayer(ctx, list) {
+      const glow = SS.FX.sprite('tracer');
+      ctx.globalCompositeOperation = 'lighter';
+      for (const b of list) ctx.drawImage(glow, b.x - 6, b.y - 12, 12, 26);
+      ctx.globalCompositeOperation = 'source-over';
       for (const b of list) {
-        const x = Math.round(b.x), y = Math.round(b.y);
         // 예광탄: 꼬리가 긴 노란 탄
-        ctx.fillStyle = 'rgba(255, 170, 40, 0.55)';
-        ctx.fillRect(x - 1, y - 2, 3, 14);
-        ctx.fillStyle = '#ffe14a';
-        ctx.fillRect(x - 1, y - 7, 3, 9);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(x, y - 7, 1, 5);
+        const gr = ctx.createLinearGradient(0, b.y - 8, 0, b.y + 14);
+        gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.3, '#ffe14a'); gr.addColorStop(1, 'rgba(255,140,40,0)');
+        ctx.fillStyle = gr;
+        ctx.fillRect(b.x - 1.2, b.y - 8, 2.4, 22);
       }
     },
 
     drawEnemy(ctx, list, time) {
-      const blink = Math.floor(time * 12) % 2 === 0;
+      const orange = SS.FX.sprite('bullet'), pink = SS.FX.sprite('plasma');
+      // 밝은 배경(사막·설원)에서도 보이도록 어두운 테두리 먼저
+      ctx.fillStyle = 'rgba(20,6,4,0.75)';
+      ctx.beginPath();
+      for (const b of list) { ctx.moveTo(b.x + b.r + 2, b.y); ctx.arc(b.x, b.y, b.r + 2, 0, Math.PI * 2); }
+      ctx.fill();
+      ctx.globalCompositeOperation = 'lighter';
+      const pulse = 1 + Math.sin(time * 20) * 0.12;
       for (const b of list) {
-        const x = Math.round(b.x), y = Math.round(b.y);
-        if (b.style === 1) { // 보스 탄: 분홍 플라스마 탄
-          ctx.fillStyle = blink ? '#ff4fd8' : '#c0208a';
-          ctx.fillRect(x - 3, y - 4, 6, 8);
-          ctx.fillRect(x - 4, y - 3, 8, 6);
-          ctx.fillStyle = '#fff6c0';
-          ctx.fillRect(x - 1, y - 2, 2, 4);
-        } else { // 일반 탄: 붉게 달아오른 기관포탄
-          ctx.fillStyle = blink ? '#ff3b1e' : '#ff8a2e';
-          ctx.fillRect(x - 2, y - 3, 4, 6);
-          ctx.fillRect(x - 3, y - 2, 6, 4);
-          ctx.fillStyle = '#fff2c0';
-          ctx.fillRect(x - 1, y - 1, 2, 2);
-        }
+        const s = (b.style === 1 ? 22 : 16) * pulse;
+        ctx.drawImage(b.style === 1 ? pink : orange, b.x - s / 2, b.y - s / 2, s, s);
       }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#fff6dc';
+      ctx.beginPath();
+      for (const b of list) { ctx.moveTo(b.x + 1.6, b.y); ctx.arc(b.x, b.y, 1.6, 0, Math.PI * 2); }
+      ctx.fill();
     },
   };
 
   SS.Bullet = Bullet;
+
+  // ---- 빛 번짐 스프라이트 (폭발·탄환·불꽃·연기) ----
+  const FXS = {};
+  function radial(size, stops) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    for (const [o, col] of stops) gr.addColorStop(o, col);
+    g.fillStyle = gr;
+    g.fillRect(0, 0, size, size);
+    return c;
+  }
+  SS.FX = {
+    sprite(name) {
+      if (FXS[name]) return FXS[name];
+      const defs = {
+        fire: [[0, 'rgba(255,255,240,1)'], [0.2, 'rgba(255,230,120,0.95)'], [0.45, 'rgba(255,130,30,0.7)'], [0.75, 'rgba(200,40,10,0.25)'], [1, 'rgba(120,10,0,0)']],
+        smoke: [[0, 'rgba(70,70,76,0.75)'], [0.6, 'rgba(60,60,66,0.35)'], [1, 'rgba(50,50,56,0)']],
+        trail: [[0, 'rgba(255,255,255,0.7)'], [1, 'rgba(255,255,255,0)']],
+        bullet: [[0, 'rgba(255,250,220,1)'], [0.3, 'rgba(255,150,40,0.9)'], [1, 'rgba(255,60,0,0)']],
+        plasma: [[0, 'rgba(255,240,255,1)'], [0.3, 'rgba(255,80,220,0.9)'], [1, 'rgba(160,0,140,0)']],
+        tracer: [[0, 'rgba(255,240,160,0.8)'], [1, 'rgba(255,170,40,0)']],
+        spark: [[0, 'rgba(255,255,255,1)'], [0.4, 'rgba(255,220,120,0.8)'], [1, 'rgba(255,160,40,0)']],
+        shield: [[0, 'rgba(120,240,255,0)'], [0.7, 'rgba(120,240,255,0.08)'], [0.9, 'rgba(160,250,255,0.55)'], [1, 'rgba(120,240,255,0)']],
+      };
+      FXS[name] = radial(64, defs[name]);
+      return FXS[name];
+    },
+  };
 })();

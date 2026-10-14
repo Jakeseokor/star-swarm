@@ -5,14 +5,10 @@
   const C = SS.CONFIG;
   const P = C.PLAYER;
 
-  // 오리지널 픽셀아트: 위에서 본 쌍발 제공 전투기 (17×21)
-  // 왼쪽 절반+중앙 열만 적고 거울 복사. K 외곽선, G/g/d 기체 명암, C/c 캐노피, R 날개 표식, E 엔진 노즐
-  SS.PLAYER_ART = [
-    '........K', '.......KG', '.......GG', '.......Gg', '......KGC', '......GgC', '......Ggc',
-    '......Ggg', '.....KGgd', '....KGGgd', '...KGGGgd', '..KGGGGgd', '.KGGGGGgd', 'KRGGGGGgd',
-    'KRRdddGgd', '.KK...Kgd', '......Kgd', '.....KGgd', '....KGGgd', '...KRGdEd', '...KKK.E.',
-  ].map((r) => r + r.slice(0, -1).split('').reverse().join(''));
-  SS.PLAYER_PALETTE = { K: '#141a28', G: '#d2dbe8', g: '#8a97ad', d: '#56627a', C: '#5ef2ff', c: '#1f7fa8', R: '#e8394a', E: '#3a3f4b' };
+  // 기체 그래픽은 aircraft.js (SS.Aircraft 'player')
+  const homeY = () => C.HEIGHT - P.homeFromBottom - SS.view.safeBottom;
+  const minY = () => C.HEIGHT * P.minYFrac;
+  const maxY = () => C.HEIGHT - P.maxFromBottom - SS.view.safeBottom;
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 
@@ -25,7 +21,7 @@
 
     resetFull() {
       this.x = C.WIDTH / 2;
-      this.y = P.y;
+      this.y = homeY();
       this.vy = 0;
       this.alive = true;
       this.invuln = P.invulnTime;
@@ -38,7 +34,7 @@
 
     respawn() {
       this.x = C.WIDTH / 2;
-      this.y = P.y;
+      this.y = homeY();
       this.alive = true;
       this.invuln = P.invulnTime;
       this.cool = 0.3;
@@ -76,7 +72,7 @@
       if (inp.keys.down) dy += P.vSpeed * dt; // 후진
       this.x = clamp(this.x + dx, P.margin, C.WIDTH - P.margin);
       const oldY = this.y;
-      this.y = clamp(this.y + dy, P.minY, P.maxY);
+      this.y = clamp(this.y + dy, minY(), maxY());
       this.vy = dt > 0 ? (this.y - oldY) / dt : 0;
 
       if (!canFire) return;
@@ -89,56 +85,72 @@
       this.cool = this.rapid > 0 ? P.rapidCooldown : P.fireCooldown;
       this.muzzle = 0.06;
       if (this.double > 0) {
-        SS.Bullet.player(this.game, this.x - 9, this.y - 6);
-        SS.Bullet.player(this.game, this.x + 9, this.y - 6);
+        SS.Bullet.player(this.game, this.x - 11, this.y - 4);
+        SS.Bullet.player(this.game, this.x + 11, this.y - 4);
       } else {
-        SS.Bullet.player(this.game, this.x, this.y - 22);
+        SS.Bullet.player(this.game, this.x, this.y - 26);
       }
       SS.Audio.play('shoot');
     }
 
+    // 화면 회전 등으로 영역이 바뀌면 범위 안으로
+    clampToView() {
+      this.x = clamp(this.x, P.margin, C.WIDTH - P.margin);
+      this.y = clamp(this.y, minY(), maxY());
+    }
+
+    drawShadow(ctx) {
+      if (!this.alive) return;
+      SS.Aircraft.drawShadow(ctx, 'player', this.x, this.y, this.bank * 0.3, 16);
+    }
+
     draw(ctx, time) {
       if (!this.alive) return;
-      if (!this.sprite) this.sprite = SS.Gfx.makeSprite(SS.PLAYER_ART, SS.PLAYER_PALETTE, 2);
-      const x = Math.round(this.x), y = Math.round(this.y);
+      // 좌우 이동 시 살짝 기울어짐 (뱅크)
+      const target = Math.max(-1, Math.min(1, (this.x - (this.lastX || this.x)) / 4));
+      this.bank = (this.bank || 0) + (target - (this.bank || 0)) * 0.2;
+      this.lastX = this.x;
+      const x = this.x, y = this.y;
       const blinkOff = this.invuln > 0 && Math.floor(time * 16) % 2 === 0;
 
       if (!blinkOff) {
-        const w = this.sprite.width, h = this.sprite.height;
         // 애프터버너 (전진 중엔 길게, 후진 중엔 짧게)
-        const f = Math.floor(time * 30) % 3;
-        const len = 5 + f * 2 + (this.vy < -20 ? 8 : this.vy > 20 ? -3 : 0);
-        const ny = y + h / 2 - 2;
-        for (const nx of [x - 3, x + 1]) {
-          ctx.fillStyle = 'rgba(255, 120, 40, 0.75)';
-          ctx.fillRect(nx - 1, ny, 4, len);
-          ctx.fillStyle = '#ffe14a';
-          ctx.fillRect(nx, ny, 2, Math.max(2, len - 3));
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(nx, ny, 2, 2);
+        const f = 0.85 + Math.sin(time * 40) * 0.1 + Math.random() * 0.1;
+        const len = (14 + (this.vy < -20 ? 12 : this.vy > 20 ? -6 : 0)) * f;
+        const fire = SS.FX.sprite('fire');
+        ctx.globalCompositeOperation = 'lighter';
+        for (const nx of [-2.3, 2.3]) {
+          const gr = ctx.createLinearGradient(0, y + 22, 0, y + 22 + len);
+          gr.addColorStop(0, 'rgba(255,255,255,0.95)');
+          gr.addColorStop(0.25, 'rgba(120,200,255,0.85)');
+          gr.addColorStop(0.6, 'rgba(255,150,60,0.6)');
+          gr.addColorStop(1, 'rgba(255,80,20,0)');
+          ctx.fillStyle = gr;
+          ctx.beginPath();
+          ctx.moveTo(x + nx - 1.7, y + 22);
+          ctx.lineTo(x + nx + 1.7, y + 22);
+          ctx.lineTo(x + nx, y + 22 + len);
+          ctx.closePath();
+          ctx.fill();
+          ctx.drawImage(fire, x + nx - 5, y + 18, 10, 10);
         }
-        ctx.drawImage(this.sprite, x - w / 2, y - h / 2);
+        ctx.globalCompositeOperation = 'source-over';
+        SS.Aircraft.draw(ctx, 'player', x, y, this.bank * 0.12);
         // 기관포 발사 섬광
         if (this.muzzle > 0) {
-          ctx.fillStyle = '#fff6c0';
+          const sp = SS.FX.sprite('spark');
+          ctx.globalCompositeOperation = 'lighter';
           if (this.double > 0) {
-            ctx.fillRect(x - 11, y - 10, 4, 4);
-            ctx.fillRect(x + 7, y - 10, 4, 4);
-          } else {
-            ctx.fillRect(x - 2, y - 26, 4, 5);
-            ctx.fillStyle = '#ffd23a';
-            ctx.fillRect(x - 4, y - 24, 8, 2);
-          }
+            ctx.drawImage(sp, x - 17, y - 10, 12, 12);
+            ctx.drawImage(sp, x + 5, y - 10, 12, 12);
+          } else ctx.drawImage(sp, x - 7, y - 33, 14, 14);
+          ctx.globalCompositeOperation = 'source-over';
         }
       }
 
       if (this.shield) {
-        const r = 25 + Math.sin(time * 8) * 1.5;
-        ctx.strokeStyle = `rgba(79, 240, 255, ${0.55 + Math.sin(time * 10) * 0.25})`;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.stroke();
+        const r = 30 + Math.sin(time * 8) * 1.5;
+        ctx.drawImage(SS.FX.sprite('shield'), x - r, y - r, r * 2, r * 2);
       }
     }
   }

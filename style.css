@@ -20,9 +20,7 @@ html, body {
 #wrap {
   position: fixed;
   inset: 0;
-  box-sizing: border-box;
-  /* 노치·홈 인디케이터 영역(safe-area) 피하기 */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  /* 화면 전체를 캔버스로 채움 (노치·홈 인디케이터 영역은 게임이 #safe로 읽어 HUD만 피함) */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -35,6 +33,17 @@ canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   touch-action: none;
+}
+
+#safe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 noscript {

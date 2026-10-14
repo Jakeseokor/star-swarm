@@ -6,9 +6,12 @@
 window.SS = window.SS || {};
 
 SS.CONFIG = {
-  // 논리 해상도 (3:4, 아이패드 세로 비율). 실제 화면에는 비율을 유지한 채 확대·레터박스 처리.
+  // 논리 해상도. 화면 전체를 쓰도록 실행 중 화면 비율에 맞춰 바뀜 (SS.setView)
+  //  세로: 폭 480 고정, 높이 = 화면 비율대로 / 가로: 높이 640 고정, 폭 = 화면 비율대로
   WIDTH: 480,
   HEIGHT: 640,
+  BASE_W: 480,                 // 대열·메뉴 배치 기준 폭
+  BASE_H: 640,
   MAX_DT: 1 / 30,              // 프레임이 끊겨도 한 번에 진행할 최대 시간(초)
   STORAGE_KEY: 'starSwarm.save.v1',
 
@@ -18,9 +21,9 @@ SS.CONFIG = {
   LOOP_SPEED_MULT: 1.3,        // 2회차 속도 배율 (3회차 = 1.3², ...)
 
   PLAYER: {
-    y: 588,                    // 기체 시작 높이
-    minY: 400,                 // 전진 한계 (위로 올라갈 수 있는 최대 높이)
-    maxY: 604,                 // 후진 한계
+    homeFromBottom: 70,        // 기체 시작 위치 (화면 아래에서 px)
+    minYFrac: 0.58,            // 전진 한계 (화면 높이 비율)
+    maxFromBottom: 34,         // 후진 한계 (화면 아래에서 px)
     speed: 300,                // 키보드 좌우 이동 속도 (px/s)
     vSpeed: 240,               // 키보드 전진·후진 속도 (px/s)
     dragSensitivity: 1.15,     // 터치 드래그 감도 (손가락 이동량 대비)
@@ -66,15 +69,15 @@ SS.CONFIG = {
 
   // 적 3종
   ENEMY: {
-    grunt:     { hp: 1, radius: 12, speedMul: 1.0 },  // 일반형
-    striker:   { hp: 1, radius: 10, speedMul: 1.45 }, // 돌격형 (빠름)
-    commander: { hp: 2, radius: 14, speedMul: 0.95 }, // 지휘관형 (2회 피격)
+    grunt:     { hp: 1, radius: 13, speedMul: 1.0 },  // 일반형: 경량 델타익 전투기
+    striker:   { hp: 1, radius: 13, speedMul: 1.45 }, // 돌격형: 고속 요격기
+    commander: { hp: 2, radius: 17, speedMul: 0.95 }, // 지휘관형: 4발 중폭격기 (2회 피격)
   },
   TURN_RATE: 3.6,              // 곡선 비행 선회력 (rad/s, 속도 150 기준)
 
   FORMATION: {
-    top: 86, colSpacing: 38, rowSpacing: 32,
-    swayAmp: 34, swaySpeed: 0.9,   // 좌우 흔들림
+    top: 96, colSpacing: 42, rowSpacing: 36,
+    swayAmp: 26, swaySpeed: 0.9,   // 좌우 흔들림
     breathe: 0.06, breatheSpeed: 1.7, // 대열 수축·팽창
   },
 
@@ -83,13 +86,14 @@ SS.CONFIG = {
 
   BOSS: {
     hp: 60,                    // 페이즈 전환(2/3, 1/3 지점)마다 파워업 캡슐 드롭
-    y: 118,
+    y: 140,
     // 페이즈별 이동 속도 배율 [-, 1, 2, 3]
     moveSpeed: [0, 0.55, 0.75, 1.0],
   },
 
   /*
    * 스테이지(=난이도) 테이블
+   *  region / biome  : 전장 지역과 배경 지형 (sea·desert·mountain·arctic·gulfnight)
    *  rows            : 위→아래 대열 [적 종류, 수]
    *  baseSpeed       : 진입·급강하 비행 속도 (px/s)
    *  entryGroupSize  : 한 줄로 같이 날아오는 무리 크기
@@ -103,6 +107,7 @@ SS.CONFIG = {
    */
   STAGES: [
     {
+      region: 'SOUTH CHINA SEA', regionKo: '남중국해', biome: 'sea',
       name: 'FIRST CONTACT', nameKo: '첫 조우 · 튜토리얼',
       rows: [['grunt', 8], ['grunt', 8]],
       baseSpeed: 130, entryGroupSize: 4, entryInterval: 2.2, entryPairs: false,
@@ -111,6 +116,7 @@ SS.CONFIG = {
       tutorial: true, boss: false,
     },
     {
+      region: 'MIDDLE EAST DESERT', regionKo: '중동 사막', biome: 'desert',
       name: 'STRIKE FORCE', nameKo: '돌격형 출현',
       rows: [['striker', 8], ['grunt', 8], ['grunt', 8]],
       baseSpeed: 160, entryGroupSize: 4, entryInterval: 1.9, entryPairs: false,
@@ -119,6 +125,7 @@ SS.CONFIG = {
       tutorial: false, boss: false,
     },
     {
+      region: 'HIMALAYA', regionKo: '히말라야 산맥', biome: 'mountain',
       name: 'COMMAND SHIP', nameKo: '지휘관형 등장 · 조준 사격',
       rows: [['commander', 4], ['striker', 8], ['grunt', 10], ['grunt', 10]],
       baseSpeed: 180, entryGroupSize: 4, entryInterval: 2.0, entryPairs: true,
@@ -127,6 +134,7 @@ SS.CONFIG = {
       tutorial: false, boss: false,
     },
     {
+      region: 'ARCTIC OCEAN', regionKo: '북극해 빙원', biome: 'arctic',
       name: 'ALL-OUT ASSAULT', nameKo: '총공세 · 3방향 탄',
       rows: [['commander', 6], ['striker', 10], ['grunt', 10], ['grunt', 10]],
       baseSpeed: 205, entryGroupSize: 6, entryInterval: 2.0, entryPairs: true,
@@ -135,6 +143,7 @@ SS.CONFIG = {
       tutorial: false, boss: false,
     },
     {
+      region: 'PERSIAN GULF', regionKo: '페르시아만 야간', biome: 'gulfnight',
       name: 'MOTHERSHIP', nameKo: '모선 결전 · 탄막',
       rows: [['commander', 8], ['striker', 8], ['striker', 8], ['grunt', 8], ['grunt', 8]],
       baseSpeed: 215, entryGroupSize: 4, entryInterval: 1.7, entryPairs: true,
@@ -143,4 +152,14 @@ SS.CONFIG = {
       tutorial: false, boss: true,
     },
   ],
+};
+
+// ---- 화면 크기 변경 알림 ----
+SS.view = { listeners: [], safeTop: 0, safeBottom: 0, scale: 1 };
+SS.onView = (fn) => SS.view.listeners.push(fn);
+SS.setView = (w, h, safeTop, safeBottom, scale) => {
+  SS.CONFIG.WIDTH = w;
+  SS.CONFIG.HEIGHT = h;
+  Object.assign(SS.view, { safeTop, safeBottom, scale });
+  SS.view.listeners.forEach((f) => f());
 };

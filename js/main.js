@@ -3,7 +3,8 @@
 (function () {
   const SS = window.SS;
   const C = SS.CONFIG;
-  const W = C.WIDTH, H = C.HEIGHT;
+  let W = C.WIDTH, H = C.HEIGHT;
+  SS.onView(() => { W = C.WIDTH; H = C.HEIGHT; });
 
   function rand(a, b) { return a + Math.random() * (b - a); }
 
@@ -30,6 +31,8 @@
       this.canvas = document.getElementById('game');
       this.ctx = this.canvas.getContext('2d');
       this.wrap = document.getElementById('wrap');
+      this.safeProbe = document.getElementById('safe');
+      this.bg = new SS.Background();
       this.save = loadSave();
       SS.Audio.setEnabled(this.save.sound);
       SS.Audio.setMusicEnabled(this.save.music);
@@ -92,24 +95,54 @@
         if (!(dt > 0)) dt = 0;
         if (dt > 0) this.fps += (1 / dt - this.fps) * 0.05;
         this.update(Math.min(dt, C.MAX_DT));
+        this.adaptQuality(dt);
         this.render();
         SS.Input.endFrame();
       };
       requestAnimationFrame(frame);
     }
 
-    // ---------------- 화면 크기 / 레터박스 ----------------
+    // ---------------- 화면 크기: 아이패드 화면 전체 사용 ----------------
+    // 세로: 폭 480 고정 + 높이를 화면 비율대로 / 가로: 높이 640 고정 + 폭을 화면 비율대로
     resize() {
-      const cs = getComputedStyle(this.wrap);
-      const aw = this.wrap.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-      const ah = this.wrap.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-      const scale = Math.max(0.1, Math.min(aw / W, ah / H));
-      const cssW = Math.floor(W * scale), cssH = Math.floor(H * scale);
-      this.canvas.style.width = cssW + 'px';
-      this.canvas.style.height = cssH + 'px';
-      const dpr = Math.min(window.devicePixelRatio || 1, 3);
-      this.canvas.width = Math.round(cssW * dpr);
-      this.canvas.height = Math.round(cssH * dpr);
+      const vw = Math.max(1, window.innerWidth), vh = Math.max(1, window.innerHeight);
+      let w, h;
+      if (vw <= vh) {
+        w = C.BASE_W;
+        h = Math.max(560, Math.min(1040, Math.round((C.BASE_W * vh) / vw)));
+      } else {
+        h = C.BASE_H;
+        w = Math.max(480, Math.min(1400, Math.round((C.BASE_H * vw) / vh)));
+      }
+      this.canvas.style.width = vw + 'px';
+      this.canvas.style.height = vh + 'px';
+      if (!this.dprCap) this.dprCap = 3;
+      const dpr = Math.min(window.devicePixelRatio || 1, this.dprCap);
+      this.canvas.width = Math.round(vw * dpr);
+      this.canvas.height = Math.round(vh * dpr);
+      const scale = this.canvas.width / w;
+      // 노치·홈 인디케이터 영역 (논리 px)
+      const cs = getComputedStyle(this.safeProbe);
+      const safeTop = (parseFloat(cs.paddingTop) || 0) * (w / vw);
+      const safeBottom = (parseFloat(cs.paddingBottom) || 0) * (w / vw);
+      SS.setView(w, h, safeTop, safeBottom, scale);
+      SS.Aircraft.setResolution(scale);
+      this.sky = null;
+      if (this.stage) this.bg.set(this.stage.cfg.biome);
+      if (this.player) this.player.clampToView();
+    }
+
+    // 느린 기기 보호: 전투 중 3초 이상 45fps 미만이면 렌더 해상도를 한 단계 낮춤
+    adaptQuality(dt) {
+      if (this.state !== 'playing' || this.stageIntro > 0) return;
+      if (this.fps < 45) this.lowT = (this.lowT || 0) + dt;
+      else this.lowT = Math.max(0, (this.lowT || 0) - dt * 0.5);
+      if (this.lowT > 3 && this.dprCap > 1) {
+        this.dprCap = Math.max(1, this.dprCap - 0.5);
+        this.lowT = 0;
+        this.fps = 60;
+        this.resize();
+      }
     }
 
     // ---------------- 저장 ----------------
@@ -172,6 +205,7 @@
       this.stageNum = n;
       this.speedMul = Math.pow(C.LOOP_SPEED_MULT, this.loop - 1);
       this.stage = new SS.Stage(this, n);
+      this.bg.set(this.stage.cfg.biome);
       this.pBullets.length = 0;
       this.eBullets.length = 0;
       this.powerups.length = 0;
@@ -262,40 +296,50 @@
       }
     }
 
+    // 폭발: 불덩이 + 불꽃 파편 + 잔해 (colors는 파편 색)
     explode(x, y, colors, count, speed, life) {
       count = count || 14;
       speed = speed || 120;
       life = life || 0.6;
-      for (let i = 0; i < count; i++) {
-        const a = Math.random() * Math.PI * 2;
-        const s = speed * (0.3 + Math.random() * 0.7);
+      const big = count >= 30;
+      const balls = Math.max(2, Math.round(count / 4));
+      for (let i = 0; i < balls; i++) {
         this.particles.push({
-          x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-          life: life * (0.5 + Math.random() * 0.5), max: life,
-          color: colors[i % colors.length], size: Math.random() < 0.3 ? 3 : 2,
+          k: 'fire', x: x + rand(-6, 6) * (big ? 2 : 1), y: y + rand(-6, 6) * (big ? 2 : 1),
+          vx: rand(-30, 30), vy: rand(-30, 30), life: life * rand(0.6, 1), max: life,
+          size: (big ? 34 : 18) * rand(0.7, 1.2), grow: big ? 60 : 40,
         });
       }
-      if (this.particles.length > 600) this.particles.splice(0, this.particles.length - 600);
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = speed * (0.3 + Math.random() * 0.7);
+        this.particles.push({
+          k: i % 3 === 0 ? 'debris' : 'spark', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: life * (0.5 + Math.random() * 0.5), max: life, size: rand(2, 4), rot: Math.random() * 6,
+          color: colors[i % colors.length],
+        });
+      }
+      if (this.particles.length > 700) this.particles.splice(0, this.particles.length - 700);
     }
 
     // 연기 (점점 커지며 옅어짐)
     smoke(x, y, n, color) {
       for (let i = 0; i < (n || 1); i++) {
         this.particles.push({
-          x: x + rand(-4, 4), y: y + rand(-4, 4), vx: rand(-15, 15), vy: rand(-10, 25),
-          life: rand(0.5, 0.9), max: 0.9, color: color || '#5a5f6b', size: 3, grow: 12,
+          k: 'smoke', x: x + rand(-4, 4), y: y + rand(-4, 4), vx: rand(-15, 15), vy: rand(-10, 25),
+          life: rand(0.6, 1.1), max: 1.1, size: rand(8, 14), grow: 26, dark: color === '#3e434e' || color === '#4a4e58',
         });
       }
     }
 
     // 비행운
     trail(x, y) {
-      if (this.particles.length > 520) return;
-      this.particles.push({ x, y, vx: 0, vy: 20, life: 0.35, max: 0.5, color: '#9aa6bd', size: 2, grow: 5 });
+      if (this.particles.length > 600) return;
+      this.particles.push({ k: 'trail', x, y, vx: 0, vy: 30, life: 0.45, max: 0.45, size: 5, grow: 12 });
     }
 
-    spark(x, y, color) {
-      this.particles.push({ x, y, vx: rand(-40, 40), vy: rand(-60, 10), life: 0.3, max: 0.3, color: color || '#ffd23a', size: 2 });
+    spark(x, y) {
+      this.particles.push({ k: 'spark', x, y, vx: rand(-40, 40), vy: rand(-60, 10), life: 0.3, max: 0.3, size: 3 });
     }
 
     popup(x, y, text, color) {
@@ -303,7 +347,7 @@
     }
 
     clearEnemyBullets() {
-      for (const b of this.eBullets) this.explode(b.x, b.y, ['#ffffff'], 2, 40, 0.3);
+      for (const b of this.eBullets) this.particles.push({ k: 'spark', x: b.x, y: b.y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: 6 });
       this.eBullets.length = 0;
     }
 
@@ -367,6 +411,7 @@
         s.y += s.speed * dt * warp;
         if (s.y > H) { s.y -= H; s.x = Math.random() * W; }
       }
+      if (this.stage && WORLD_STATES.includes(this.state)) this.bg.update(dt, 36 * warp);
       for (const c of this.clouds) {
         c.y += c.speed * dt * warp;
         if (c.y > H) { c.y = -c.img.height * c.scale - rand(0, 120); c.x = rand(-60, W - 40); }
@@ -496,6 +541,7 @@
         q.y += q.vy * dt;
         q.vx *= 0.97;
         q.vy *= 0.97;
+        if (q.rot !== undefined) q.rot += dt * 8;
         q.life -= dt;
         if (q.grow) q.size += q.grow * dt;
         if (q.life > 0) this.particles[n++] = q;
@@ -655,20 +701,24 @@
       ctx.fillRect(0, 0, W, H);
 
       ctx.save();
-      if (this.shake > 0) ctx.translate(Math.round(rand(-4, 4) * this.shake * 2), Math.round(rand(-4, 4) * this.shake * 2));
+      if (this.shake > 0) ctx.translate(rand(-4, 4) * this.shake * 2, rand(-4, 4) * this.shake * 2);
 
-      for (const s of this.stars) {
-        if (Math.sin(this.time * 3 + s.phase) < -0.6) continue; // 반짝임
-        ctx.fillStyle = s.color;
-        ctx.fillRect(Math.round(s.x), Math.round(s.y), s.size, s.size);
+      const inWorld = this.stage && WORLD_STATES.includes(this.state);
+      if (inWorld) {
+        this.drawWorld(ctx);
+      } else {
+        ctx.imageSmoothingEnabled = false;
+        for (const s of this.stars) {
+          if (Math.sin(this.time * 3 + s.phase) < -0.6) continue; // 반짝임
+          ctx.fillStyle = s.color;
+          ctx.fillRect(Math.round(s.x), Math.round(s.y), s.size, s.size);
+        }
+        for (const c of this.clouds) {
+          ctx.globalAlpha = c.alpha;
+          ctx.drawImage(c.img, Math.round(c.x), Math.round(c.y), c.img.width * c.scale, c.img.height * c.scale);
+        }
+        ctx.globalAlpha = 1;
       }
-      for (const c of this.clouds) {
-        ctx.globalAlpha = c.alpha;
-        ctx.drawImage(c.img, Math.round(c.x), Math.round(c.y), c.img.width * c.scale, c.img.height * c.scale);
-      }
-      ctx.globalAlpha = 1;
-
-      if (this.stage && WORLD_STATES.includes(this.state)) this.drawWorld(ctx);
       ctx.restore();
 
       if (this.flash > 0) {
@@ -682,49 +732,83 @@
     }
 
     drawWorld(ctx) {
-      const t = this.time;
-      this.stage.draw(ctx, t);
+      const t = this.time, bg = this.bg;
+      ctx.imageSmoothingEnabled = true;
+      // 1) 지면 → 구름 그림자 → 항공기 그림자 → 구름
+      bg.drawGround(ctx, t);
+      bg.drawCloudShadows(ctx);
+      this.stage.drawShadows(ctx);
+      this.player.drawShadow(ctx);
+      bg.drawClouds(ctx);
 
-      for (const u of this.powerups) {
-        const x = Math.round(u.x), y = Math.round(u.y);
-        const c = SS.UI.PU_COLORS[u.type];
-        const on = Math.floor(u.t * 6) % 2 === 0;
-        ctx.fillStyle = on ? c : '#ffffff';
-        ctx.fillRect(x - 8, y - 6, 16, 12);
-        ctx.fillRect(x - 6, y - 8, 12, 16);
-        ctx.fillStyle = '#10102a';
-        ctx.fillRect(x - 5, y - 5, 10, 10);
-        SS.Gfx.text(ctx, SS.UI.PU_LETTER[u.type], x - 2, y - 3, { size: 1, color: c });
+      // 2) 연기·비행운 (항공기 아래)
+      const smoke = SS.FX.sprite('smoke'), trail = SS.FX.sprite('trail');
+      for (const q of this.particles) {
+        if (q.k !== 'smoke' && q.k !== 'trail') continue;
+        ctx.globalAlpha = Math.max(0, Math.min(1, q.life / q.max)) * (q.k === 'trail' ? 0.35 : q.dark ? 0.9 : 0.7);
+        ctx.drawImage(q.k === 'trail' ? trail : smoke, q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
       }
+      ctx.globalAlpha = 1;
+
+      // 3) 항공기
+      this.stage.draw(ctx, t);
+      this.player.draw(ctx, t);
+
+      // 4) 보급 캡슐
+      const glow = SS.FX.sprite('spark');
+      for (const u of this.powerups) {
+        const c = SS.UI.PU_COLORS[u.type];
+        const pulse = 1 + Math.sin(u.t * 8) * 0.15;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.drawImage(glow, u.x - 16 * pulse, u.y - 16 * pulse, 32 * pulse, 32 * pulse);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = '#10142a';
+        ctx.beginPath(); ctx.roundRect(u.x - 9, u.y - 9, 18, 18, 5); ctx.fill();
+        ctx.lineWidth = 2; ctx.strokeStyle = c; ctx.stroke();
+        SS.Gfx.text(ctx, SS.UI.PU_LETTER[u.type], u.x - 4.5, u.y - 6.5, { size: 2, color: c });
+      }
+
+      // 5) 폭발 불꽃·파편
+      const fire = SS.FX.sprite('fire'), sp = SS.FX.sprite('spark');
+      ctx.globalCompositeOperation = 'lighter';
+      for (const q of this.particles) {
+        if (q.k !== 'fire' && q.k !== 'spark') continue;
+        const a = Math.max(0, Math.min(1, q.life / q.max));
+        ctx.globalAlpha = q.k === 'fire' ? Math.min(1, a * 1.6) : a;
+        const sz = q.k === 'fire' ? q.size : q.size * 2.2;
+        ctx.drawImage(q.k === 'fire' ? fire : sp, q.x - sz / 2, q.y - sz / 2, sz, sz);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      for (const q of this.particles) {
+        if (q.k !== 'debris') continue;
+        ctx.globalAlpha = Math.max(0, Math.min(1, q.life / q.max));
+        ctx.save();
+        ctx.translate(q.x, q.y); ctx.rotate(q.rot);
+        ctx.fillStyle = '#2b2d33'; ctx.fillRect(-q.size / 2, -q.size / 4, q.size, q.size / 2);
+        ctx.fillStyle = q.color || '#888'; ctx.fillRect(-q.size / 2, -q.size / 4, q.size / 2, q.size / 4);
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+
+      // 6) 탄환 (가장 위 — 항상 잘 보이게)
+      SS.Bullet.drawPlayer(ctx, this.pBullets);
+      SS.Bullet.drawEnemy(ctx, this.eBullets, t);
 
       const w = this.bombWave;
       if (w) {
         const fade = Math.max(0, 1 - w.t / (C.BOMB.duration + 0.25));
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = `rgba(255, 138, 46, ${fade})`;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = `rgba(255, 160, 60, ${fade})`;
+        ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2); ctx.stroke();
         ctx.lineWidth = 2;
         ctx.strokeStyle = `rgba(255, 255, 255, ${fade})`;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, Math.max(0, w.r - 10), 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(w.x, w.y, Math.max(0, w.r - 12), 0, Math.PI * 2); ctx.stroke();
       }
 
-      SS.Bullet.drawPlayer(ctx, this.pBullets);
-      SS.Bullet.drawEnemy(ctx, this.eBullets, t);
-      this.player.draw(ctx, t);
-
-      for (const q of this.particles) {
-        ctx.globalAlpha = Math.max(0, Math.min(1, q.life / q.max * 1.5));
-        ctx.fillStyle = q.color;
-        const sz = Math.round(q.size);
-        ctx.fillRect(Math.round(q.x - (q.grow ? sz / 2 : 0)), Math.round(q.y - (q.grow ? sz / 2 : 0)), sz, sz);
-      }
-      ctx.globalAlpha = 1;
+      bg.drawTint(ctx);
+      ctx.imageSmoothingEnabled = false;
       for (const p of this.popups) {
-        SS.Gfx.text(ctx, p.text, p.x, p.y, { size: 1, color: p.color, align: 'center' });
+        SS.Gfx.text(ctx, p.text, p.x, p.y, { size: 1, color: p.color, align: 'center', shadow: '#000000' });
       }
     }
   }

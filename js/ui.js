@@ -3,7 +3,8 @@
 (function () {
   const SS = window.SS;
   const C = SS.CONFIG;
-  const W = C.WIDTH, H = C.HEIGHT;
+  let W = C.WIDTH, H = C.HEIGHT;
+  const MW = C.BASE_W, MH = C.BASE_H; // 메뉴 화면 배치용 기준 틀 (화면 가운데에 놓임)
 
   // ---------------- 5×7 픽셀 폰트 (오리지널) ----------------
   const FONT = {
@@ -93,6 +94,7 @@
     },
 
     rawText(ctx, str, x, y, s, color) {
+      ctx.imageSmoothingEnabled = false;
       const atlas = atlasCache[color] || (atlasCache[color] = buildAtlas(color));
       for (let i = 0; i < str.length; i++) {
         const gi = glyphIndex[str[i]];
@@ -106,6 +108,8 @@
       ctx.font = `600 ${px}px -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif`;
       ctx.textAlign = align || 'center';
       ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillText(str, x + 1, y + 1);
       ctx.fillStyle = color || '#ffffff';
       ctx.fillText(str, x, y);
     },
@@ -125,9 +129,19 @@
   SS.Gfx = Gfx;
 
   // ---------------- 화면 / 메뉴 ----------------
-  const PAUSE_BTN = { x: W - 44, y: 4, w: 40, h: 36 };
-  const FIRE_BTN = { x: W - 58, y: H - 58, r: 38 };
-  const BOMB_BTN = { x: 46, y: H - 72, r: 30 };
+  // 게임 중 버튼: 실제 화면 가장자리 + 안전 영역 기준으로 배치
+  const PAUSE_BTN = { x: 0, y: 0, w: 44, h: 38 };
+  const FIRE_BTN = { x: 0, y: 0, r: 40 };
+  const BOMB_BTN = { x: 0, y: 0, r: 32 };
+  function layout() {
+    W = C.WIDTH; H = C.HEIGHT;
+    const st = SS.view.safeTop, sb = SS.view.safeBottom;
+    Object.assign(PAUSE_BTN, { x: W - 52, y: 6 + st });
+    Object.assign(FIRE_BTN, { x: W - 66, y: H - 72 - sb });
+    Object.assign(BOMB_BTN, { x: 52, y: H - 84 - sb });
+  }
+  SS.onView(layout);
+  layout();
   const PU_COLORS = { double: '#ffd23a', shield: '#4ff0ff', rapid: '#ff5ad1', bomb: '#ff8a2e' };
   const PU_LETTER = { double: 'D', shield: 'S', rapid: 'R', bomb: 'B' };
 
@@ -142,9 +156,12 @@
       this.arm = 0;
     }
 
+    // 메뉴 기준 틀(480×640)을 실제 화면 가운데에 놓기 위한 오프셋
+    off() { return { ox: (W - MW) / 2, oy: Math.max(0, (H - MH) / 2) }; }
+
     buttons() {
       const g = this.game, s = g.save;
-      const bw = 260, bx = (W - bw) / 2;
+      const bw = 260, bx = (MW - bw) / 2;
       const B = (y, label, sub, action, extra) => Object.assign({ x: bx, y, w: bw, h: 52, label, sub, action }, extra || {});
       const soundBtn = (y) => B(y, 'SOUND: ' + (s.sound ? 'ON' : 'OFF'), '효과음 켜기/끄기', () => g.toggleSound());
       const musicBtn = (y) => B(y, 'MUSIC: ' + (s.music ? 'ON' : 'OFF'), '배경음악 켜기/끄기', () => g.toggleMusic());
@@ -163,7 +180,7 @@
             const open = i <= s.unlocked;
             const st = C.STAGES[i - 1];
             list.push(B(96 + (i - 1) * 62, open ? 'STAGE ' + i : 'STAGE ' + i + ' #',
-              open ? st.nameKo : '이전 단계를 클리어하면 열립니다',
+              open ? st.regionKo + ' · ' + st.nameKo.split(' · ')[0] : '이전 단계를 클리어하면 열립니다',
               () => g.startGame(i), { disabled: !open }));
           }
           list.push(B(96 + 5 * 62 + 14, 'BACK', '타이틀로', () => g.goto('title')));
@@ -242,7 +259,9 @@
       if (inp.wasPressed('ArrowDown', 'ArrowRight', 'KeyS')) move(1);
       if (inp.wasPressed('Enter', 'NumpadEnter', 'Space')) { this.activate(btns[this.sel]); return; }
 
-      for (const t of inp.taps) {
+      const { ox, oy } = this.off();
+      for (const t0 of inp.taps) {
+        const t = { x: t0.x - ox, y: t0.y - oy };
         const i = btns.findIndex((b) => inRect(t, b));
         if (i >= 0) { this.sel = i; this.activate(btns[i]); return; }
       }
@@ -258,17 +277,26 @@
     // ---------------- 그리기 ----------------
     draw(ctx) {
       const g = this.game;
-      switch (g.state) {
+      const st = g.state;
+      if (['playing', 'paused', 'stageclear', 'gameover'].includes(st)) this.drawHUD(ctx);
+      if (st === 'paused') this.dim(ctx, 0.65);
+      if (st === 'stageclear') this.dim(ctx, 0.45);
+      if (st === 'gameover') this.dim(ctx, 0.55);
+      const { ox, oy } = this.off();
+      ctx.save();
+      ctx.translate(ox, oy);
+      switch (st) {
         case 'title': this.drawTitle(ctx); break;
         case 'select': this.drawHeader(ctx, 'SELECT STAGE', '클리어한 단계까지 선택할 수 있어요', 36); break;
         case 'settings': this.drawHeader(ctx, 'SETTINGS', '설정은 자동 저장됩니다', 56); this.drawSettingsInfo(ctx); break;
-        case 'playing': this.drawHUD(ctx); this.drawPlayOverlays(ctx); break;
-        case 'paused': this.drawHUD(ctx); this.dim(ctx, 0.65); this.drawHeader(ctx, 'PAUSED', '일시정지', 92); break;
-        case 'stageclear': this.drawHUD(ctx); this.drawStageClear(ctx); break;
-        case 'gameover': this.drawHUD(ctx); this.drawGameOver(ctx); break;
+        case 'playing': this.drawPlayOverlays(ctx); break;
+        case 'paused': this.drawHeader(ctx, 'PAUSED', '일시정지', 92); break;
+        case 'stageclear': this.drawStageClear(ctx); break;
+        case 'gameover': this.drawGameOver(ctx); break;
         case 'ending': this.drawEnding(ctx); break;
       }
       this.drawButtons(ctx);
+      ctx.restore();
     }
 
     dim(ctx, a) {
@@ -292,18 +320,18 @@
     }
 
     drawHeader(ctx, title, sub, y) {
-      Gfx.text(ctx, title, W / 2, y, { size: 4, color: '#ffe14a', align: 'center', shadow: '#c2185b' });
-      if (sub) Gfx.ktext(ctx, sub, W / 2, y + 44, 14, '#a9b6ff');
+      Gfx.text(ctx, title, MW / 2, y, { size: 4, color: '#ffe14a', align: 'center', shadow: '#c2185b' });
+      if (sub) Gfx.ktext(ctx, sub, MW / 2, y + 44, 14, '#a9b6ff');
     }
 
     drawTitle(ctx) {
       const g = this.game, t = g.time;
-      Gfx.text(ctx, 'HI-SCORE', W / 2, 18, { size: 2, color: '#ff4f5e', align: 'center' });
-      Gfx.text(ctx, Gfx.pad(g.save.hi), W / 2, 38, { size: 2, align: 'center' });
+      Gfx.text(ctx, 'HI-SCORE', MW / 2, 18, { size: 2, color: '#ff4f5e', align: 'center' });
+      Gfx.text(ctx, Gfx.pad(g.save.hi), MW / 2, 38, { size: 2, align: 'center' });
 
       const word = (str, y, color, shadow) => {
         const s = 8, adv = 6 * s;
-        const x0 = W / 2 - Gfx.textWidth(str, s) / 2;
+        const x0 = MW / 2 - Gfx.textWidth(str, s) / 2;
         for (let i = 0; i < str.length; i++) {
           const dy = Math.sin(t * 3 + i * 0.6) * 4;
           Gfx.text(ctx, str[i], x0 + i * adv, y + dy, { size: s, color, shadow });
@@ -311,73 +339,80 @@
       };
       word('STAR', 82, '#ffe14a', '#ff5a1f');
       word('SWARM', 150, '#5ef2ff', '#3a3aff');
-      Gfx.ktext(ctx, '레트로 편대 슈팅', W / 2, 228, 16, '#ffffff');
+      Gfx.ktext(ctx, '현대 공중전 편대 슈팅', MW / 2, 228, 16, '#ffffff');
 
       // 점수표
-      const spr = SS.Enemy.sprites();
-      const rows = [['grunt', '일반형'], ['striker', '돌격형'], ['commander', '지휘관형']];
+      const rows = [['grunt', '일반형 전투기'], ['striker', '돌격형 요격기'], ['commander', '지휘관 폭격기']];
       rows.forEach(([type, ko], i) => {
-        const y = 266 + i * 32;
-        const img = spr[type].frames[Math.floor(t * 2.5) % 2];
-        ctx.drawImage(img, 120 - img.width / 2, y - img.height / 2);
+        const y = 262 + i * 34;
+        SS.Aircraft.draw(ctx, type, 112, y, Math.sin(t * 2 + i) * 0.15, { scale: 0.85 });
         const sc = C.SCORE[type];
         Gfx.text(ctx, sc.formation + ' / ' + sc.diving, 150, y - 7, { size: 2, color: '#ffffff' });
-        Gfx.ktext(ctx, ko + (type === 'commander' ? ' (2회 피격)' : ''), 330, y, 12, '#a9b6ff', 'left');
+        Gfx.ktext(ctx, ko + (type === 'commander' ? ' (2회)' : ''), 318, y, 12, '#a9b6ff', 'left');
       });
 
-      Gfx.ktext(ctx, '대열 / 급강하 중 격추 점수', W / 2, 350, 11, '#7f8bcf');
-      Gfx.ktext(ctx, '터치: 드래그로 상하좌우 이동 · BOMB 버튼으로 폭탄', W / 2, 512, 12, '#a9b6ff');
-      Gfx.ktext(ctx, '키보드: 방향키 이동 · Space 발사 · X 폭탄 · P 일시정지', W / 2, 532, 12, '#a9b6ff');
-      Gfx.ktext(ctx, '1만 점마다 생명 +1 · 캡슐 D=2연발 S=쉴드 R=속사 B=폭탄', W / 2, 552, 12, '#a9b6ff');
-      if (g.save.cleared) Gfx.text(ctx, '* ALL CLEAR *', W / 2, 576, { size: 2, color: '#ffd23a', align: 'center' });
-      Gfx.text(ctx, 'ORIGINAL GAME  V1.2', W / 2, H - 26, { size: 1, color: '#55608f', align: 'center' });
+      Gfx.ktext(ctx, '대열 / 급강하 중 격추 점수', MW / 2, 350, 11, '#7f8bcf');
+      Gfx.ktext(ctx, '터치: 드래그로 상하좌우 이동 · BOMB 버튼으로 폭탄', MW / 2, 512, 12, '#a9b6ff');
+      Gfx.ktext(ctx, '키보드: 방향키 이동 · Space 발사 · X 폭탄 · P 일시정지', MW / 2, 532, 12, '#a9b6ff');
+      Gfx.ktext(ctx, '1만 점마다 생명 +1 · 캡슐 D=2연발 S=쉴드 R=속사 B=폭탄', MW / 2, 552, 12, '#a9b6ff');
+      if (g.save.cleared) Gfx.text(ctx, '* ALL CLEAR *', MW / 2, 576, { size: 2, color: '#ffd23a', align: 'center' });
+      Gfx.text(ctx, 'ORIGINAL GAME  V2.0', MW / 2, MH - 26, { size: 1, color: '#55608f', align: 'center' });
       if (SS.Audio.state() !== 'running' && Math.floor(t * 2) % 2 === 0) {
-        Gfx.ktext(ctx, '🔈 화면을 한 번 터치하면 소리가 켜집니다', W / 2, 602, 13, '#ffd23a');
+        Gfx.ktext(ctx, '🔈 화면을 한 번 터치하면 소리가 켜집니다', MW / 2, 602, 13, '#ffd23a');
       }
     }
 
     drawSettingsInfo(ctx) {
       const lines = [
         '수동 모드: 오른쪽 아래 FIRE 버튼을 누르고 있으면 발사',
-        '(가로 화면에서는 오른쪽 검은 여백 전체가 FIRE 버튼)',
         '키보드 Space는 두 모드 모두에서 발사됩니다',
-        '폭탄: 왼쪽 아래 BOMB 버튼 또는 X 키 (가로 화면은 왼쪽 여백)',
+        '폭탄: 왼쪽 아래 BOMB 버튼 또는 X 키',
       ];
-      lines.forEach((l, i) => Gfx.ktext(ctx, l, W / 2, 500 + i * 22, 12, '#a9b6ff'));
+      lines.forEach((l, i) => Gfx.ktext(ctx, l, MW / 2, 500 + i * 22, 12, '#a9b6ff'));
     }
 
     drawHUD(ctx) {
       const g = this.game, p = g.player;
-      Gfx.text(ctx, '1UP', 12, 6, { size: 2, color: '#ff4f5e' });
-      Gfx.text(ctx, Gfx.pad(g.score), 12, 24, { size: 2 });
-      Gfx.text(ctx, 'HI-SCORE', W / 2, 6, { size: 2, color: '#ff4f5e', align: 'center' });
-      Gfx.text(ctx, Gfx.pad(Math.max(g.save.hi, g.score)), W / 2, 24, { size: 2, align: 'center' });
+      const top = SS.view.safeTop, bot = H - SS.view.safeBottom;
+      // 밝은 지형 위에서도 읽히도록 위·아래 어두운 띠
+      let gr = ctx.createLinearGradient(0, 0, 0, top + 64);
+      gr.addColorStop(0, 'rgba(0,0,12,0.65)'); gr.addColorStop(1, 'rgba(0,0,12,0)');
+      ctx.fillStyle = gr; ctx.fillRect(0, 0, W, top + 64);
+      gr = ctx.createLinearGradient(0, bot - 44, 0, H);
+      gr.addColorStop(0, 'rgba(0,0,12,0)'); gr.addColorStop(1, 'rgba(0,0,12,0.6)');
+      ctx.fillStyle = gr; ctx.fillRect(0, bot - 44, W, H - bot + 44);
+
+      Gfx.text(ctx, '1UP', 14, top + 8, { size: 2, color: '#ff4f5e' });
+      Gfx.text(ctx, Gfx.pad(g.score), 14, top + 26, { size: 2 });
+      Gfx.text(ctx, 'HI-SCORE', W / 2, top + 8, { size: 2, color: '#ff4f5e', align: 'center' });
+      Gfx.text(ctx, Gfx.pad(Math.max(g.save.hi, g.score)), W / 2, top + 26, { size: 2, align: 'center' });
 
       // 일시정지 버튼
       Gfx.frame(ctx, PAUSE_BTN.x, PAUSE_BTN.y, PAUSE_BTN.w, PAUSE_BTN.h, '#4f6cff', 'rgba(12,14,44,0.7)');
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(PAUSE_BTN.x + 13, PAUSE_BTN.y + 10, 5, 16);
-      ctx.fillRect(PAUSE_BTN.x + 23, PAUSE_BTN.y + 10, 5, 16);
+      ctx.fillRect(PAUSE_BTN.x + 14, PAUSE_BTN.y + 11, 5, 16);
+      ctx.fillRect(PAUSE_BTN.x + 25, PAUSE_BTN.y + 11, 5, 16);
 
       // 남은 기체
-      if (!this.lifeIcon) this.lifeIcon = Gfx.makeSprite(SS.PLAYER_ART, SS.PLAYER_PALETTE, 1);
       const reserve = Math.max(0, g.lives - 1);
-      for (let i = 0; i < Math.min(reserve, 8); i++) ctx.drawImage(this.lifeIcon, 10 + i * 20, H - 23);
+      for (let i = 0; i < Math.min(reserve, 8); i++) SS.Aircraft.draw(ctx, 'player', 22 + i * 22, bot - 16, 0, { scale: 0.42 });
 
-      // 스테이지 / 회차
-      Gfx.text(ctx, (g.loop > 1 ? 'L' + g.loop + ' ' : '') + 'STAGE ' + g.stageNum, W - 10, H - 16, { size: 2, color: '#ffd23a', align: 'right' });
+      // 스테이지 / 회차 / 지역
+      const st = g.stage;
+      Gfx.text(ctx, (g.loop > 1 ? 'L' + g.loop + ' ' : '') + 'STAGE ' + g.stageNum, W - 12, bot - 20, { size: 2, color: '#ffd23a', align: 'right' });
+      if (st) Gfx.ktext(ctx, st.cfg.regionKo, W - 12, bot - 30, 11, '#c8d2ff', 'right');
 
       // 파워업 남은 시간
-      let px = 166;
+      let px = 120;
       const pu = (type, frac) => {
         ctx.fillStyle = PU_COLORS[type];
-        ctx.fillRect(px, H - 20, 14, 14);
-        Gfx.text(ctx, PU_LETTER[type], px + 4, H - 17, { size: 1, color: '#000000' });
+        ctx.fillRect(px, bot - 22, 14, 14);
+        Gfx.text(ctx, PU_LETTER[type], px + 4, bot - 19, { size: 1, color: '#000000' });
         if (frac !== null) {
           ctx.fillStyle = 'rgba(255,255,255,0.25)';
-          ctx.fillRect(px + 17, H - 15, 30, 4);
+          ctx.fillRect(px + 17, bot - 17, 30, 4);
           ctx.fillStyle = PU_COLORS[type];
-          ctx.fillRect(px + 17, H - 15, Math.round(30 * frac), 4);
+          ctx.fillRect(px + 17, bot - 17, Math.round(30 * frac), 4);
           px += 54;
         } else px += 20;
       };
@@ -386,9 +421,9 @@
       if (p.shield) pu('shield', null);
 
       // 보스 체력바
-      const boss = g.stage && g.stage.boss;
+      const boss = st && st.boss;
       if (boss && !boss.dead) {
-        const bw = 300, bx = (W - bw) / 2, by = 46;
+        const bw = Math.min(360, W - 140), bx = (W - bw) / 2, by = top + 48;
         Gfx.text(ctx, 'BOSS', bx - 8, by - 1, { size: 1, color: '#ff4f5e', align: 'right' });
         ctx.fillStyle = '#2a0f22';
         ctx.fillRect(bx, by, bw, 8);
@@ -432,19 +467,19 @@
       const g = this.game, st = g.stage, t = g.time;
       if (!st) return;
       if (g.stageIntro > 0) {
-        Gfx.text(ctx, 'STAGE ' + g.stageNum, W / 2, 250, { size: 4, color: '#5ef2ff', align: 'center', shadow: '#3a3aff' });
-        Gfx.text(ctx, st.cfg.name, W / 2, 296, { size: 2, color: '#ffffff', align: 'center' });
-        Gfx.ktext(ctx, st.cfg.nameKo, W / 2, 330, 15, '#a9b6ff');
-        if (g.loop > 1) Gfx.text(ctx, 'LOOP ' + g.loop + '  SPEED X' + g.speedMul.toFixed(2), W / 2, 356, { size: 2, color: '#ff8a2e', align: 'center' });
-        if (Math.floor(t * 3) % 2 === 0) Gfx.text(ctx, 'READY', W / 2, 390, { size: 3, color: '#ffe14a', align: 'center' });
+        Gfx.text(ctx, 'STAGE ' + g.stageNum, MW / 2, 250, { size: 4, color: '#5ef2ff', align: 'center', shadow: '#3a3aff' });
+        Gfx.text(ctx, st.cfg.region, MW / 2, 296, { size: 2, color: '#ffffff', align: 'center', shadow: '#000000' });
+        Gfx.ktext(ctx, st.cfg.regionKo + ' 상공 · ' + st.cfg.nameKo, MW / 2, 330, 15, '#e0e6ff');
+        if (g.loop > 1) Gfx.text(ctx, 'LOOP ' + g.loop + '  SPEED X' + g.speedMul.toFixed(2), MW / 2, 356, { size: 2, color: '#ff8a2e', align: 'center' });
+        if (Math.floor(t * 3) % 2 === 0) Gfx.text(ctx, 'READY', MW / 2, 390, { size: 3, color: '#ffe14a', align: 'center' });
       }
       if (st.warningStarted && !st.bossSpawned && Math.floor(t * 4) % 2 === 0) {
-        Gfx.text(ctx, 'WARNING', W / 2, 270, { size: 5, color: '#ff3b4e', align: 'center', shadow: '#5a0010' });
-        Gfx.ktext(ctx, '거대 모선 접근 중!', W / 2, 330, 16, '#ffd0d0');
+        Gfx.text(ctx, 'WARNING', MW / 2, 270, { size: 5, color: '#ff3b4e', align: 'center', shadow: '#5a0010' });
+        Gfx.ktext(ctx, '거대 모선 접근 중!', MW / 2, 330, 16, '#ffd0d0');
       }
       if (st.cfg.tutorial && g.loop === 1 && g.stageIntro <= 0) this.drawTutorial(ctx, st.t - 2.6);
       if (g.player.alive === false && g.lives <= 0) {
-        Gfx.text(ctx, 'GAME OVER', W / 2, 300, { size: 4, color: '#ff3b4e', align: 'center' });
+        Gfx.text(ctx, 'GAME OVER', MW / 2, 300, { size: 4, color: '#ff3b4e', align: 'center' });
       }
     }
 
@@ -464,20 +499,19 @@
       const a = Math.min(1, local * 3, (4 - local) * 3);
       ctx.globalAlpha = Math.max(0, a);
       ctx.fillStyle = 'rgba(8, 10, 40, 0.55)';
-      ctx.fillRect(30, 384, W - 60, 64);
+      ctx.fillRect(30, 384, MW - 60, 64);
       ctx.fillStyle = '#4f6cff';
-      ctx.fillRect(30, 384, W - 60, 2);
-      ctx.fillRect(30, 446, W - 60, 2);
-      Gfx.ktext(ctx, steps[i][0], W / 2, 404, 15, '#ffffff');
-      Gfx.ktext(ctx, steps[i][1], W / 2, 428, 12, '#a9b6ff');
+      ctx.fillRect(30, 384, MW - 60, 2);
+      ctx.fillRect(30, 446, MW - 60, 2);
+      Gfx.ktext(ctx, steps[i][0], MW / 2, 404, 15, '#ffffff');
+      Gfx.ktext(ctx, steps[i][1], MW / 2, 428, 12, '#a9b6ff');
       ctx.globalAlpha = 1;
     }
 
     drawStageClear(ctx) {
       const g = this.game, info = g.clearInfo, t = g.stateTime;
-      this.dim(ctx, 0.45);
-      Gfx.text(ctx, 'STAGE ' + g.stageNum, W / 2, 150, { size: 4, color: '#5ef2ff', align: 'center', shadow: '#3a3aff' });
-      Gfx.text(ctx, 'CLEAR!', W / 2, 196, { size: 5, color: '#ffe14a', align: 'center', shadow: '#ff5a1f' });
+      Gfx.text(ctx, 'STAGE ' + g.stageNum, MW / 2, 150, { size: 4, color: '#5ef2ff', align: 'center', shadow: '#3a3aff' });
+      Gfx.text(ctx, 'CLEAR!', MW / 2, 196, { size: 5, color: '#ffe14a', align: 'center', shadow: '#ff5a1f' });
       const lines = [
         ['CLEAR BONUS', info.base],
         ['NO MISS BONUS', info.noMiss],
@@ -488,37 +522,36 @@
         if (t < 0.3 + i * 0.25) return;
         const y = 282 + i * 34;
         Gfx.text(ctx, k, 80, y, { size: 2, color: i === 3 ? '#ffd23a' : '#a9b6ff' });
-        Gfx.text(ctx, v, W - 80, y, { size: 2, align: 'right' });
+        Gfx.text(ctx, v, MW - 80, y, { size: 2, align: 'right' });
       });
-      if (g.stageNum < 5 && t > 1.2) Gfx.ktext(ctx, `단계 ${g.stageNum + 1} 해금!`, W / 2, 440, 14, '#ffd23a');
+      if (g.stageNum < 5 && t > 1.2) Gfx.ktext(ctx, `단계 ${g.stageNum + 1} 해금!`, MW / 2, 440, 14, '#ffd23a');
     }
 
     drawGameOver(ctx) {
       const g = this.game, t = g.stateTime;
-      this.dim(ctx, 0.55);
-      Gfx.text(ctx, 'GAME OVER', W / 2, 200, { size: 5, color: '#ff3b4e', align: 'center', shadow: '#5a0010' });
-      Gfx.text(ctx, 'SCORE ' + Gfx.pad(g.score), W / 2, 270, { size: 2, align: 'center' });
-      Gfx.text(ctx, 'STAGE ' + g.stageNum + (g.loop > 1 ? '  LOOP ' + g.loop : ''), W / 2, 298, { size: 2, color: '#a9b6ff', align: 'center' });
-      if (g.newRecord && Math.floor(t * 4) % 2 === 0) Gfx.text(ctx, 'NEW HI-SCORE!', W / 2, 336, { size: 3, color: '#ffd23a', align: 'center' });
+      Gfx.text(ctx, 'GAME OVER', MW / 2, 200, { size: 5, color: '#ff3b4e', align: 'center', shadow: '#5a0010' });
+      Gfx.text(ctx, 'SCORE ' + Gfx.pad(g.score), MW / 2, 270, { size: 2, align: 'center' });
+      Gfx.text(ctx, 'STAGE ' + g.stageNum + (g.loop > 1 ? '  LOOP ' + g.loop : ''), MW / 2, 298, { size: 2, color: '#a9b6ff', align: 'center' });
+      if (g.newRecord && Math.floor(t * 4) % 2 === 0) Gfx.text(ctx, 'NEW HI-SCORE!', MW / 2, 336, { size: 3, color: '#ffd23a', align: 'center' });
     }
 
     drawEnding(ctx) {
       const g = this.game, t = g.stateTime;
-      Gfx.text(ctx, 'CONGRATULATIONS!', W / 2, 70, { size: 3, color: '#ffe14a', align: 'center', shadow: '#ff5a1f' });
-      Gfx.text(ctx, 'THE SWARM IS DEFEATED', W / 2, 112, { size: 2, color: '#5ef2ff', align: 'center' });
-      const ko = ['모선 "하이브 마더"를 격파했습니다!', '은하의 항로에 다시 평화가 찾아왔습니다.', '하지만 더 빠른 무리가 다가오고 있습니다…'];
-      ko.forEach((l, i) => { if (t > 0.5 + i * 0.6) Gfx.ktext(ctx, l, W / 2, 160 + i * 26, 15, '#ffffff'); });
+      Gfx.text(ctx, 'CONGRATULATIONS!', MW / 2, 70, { size: 3, color: '#ffe14a', align: 'center', shadow: '#ff5a1f' });
+      Gfx.text(ctx, 'THE SWARM IS DEFEATED', MW / 2, 112, { size: 2, color: '#5ef2ff', align: 'center' });
+      const ko = ['공중요새 "하이브 마더"를 격추했습니다!', '남중국해에서 페르시아만까지, 하늘을 되찾았습니다.', '하지만 더 빠른 편대가 다가오고 있습니다…'];
+      ko.forEach((l, i) => { if (t > 0.5 + i * 0.6) Gfx.ktext(ctx, l, MW / 2, 160 + i * 26, 15, '#ffffff'); });
 
       // 기체가 위로 날아가는 연출
-      if (!this.endShip) this.endShip = Gfx.makeSprite(SS.PLAYER_ART, SS.PLAYER_PALETTE, 3);
       const sy = 380 - Math.min(t, 3) * 20 + Math.sin(t * 2) * 4;
-      ctx.drawImage(this.endShip, W / 2 - this.endShip.width / 2, sy - this.endShip.height / 2);
-      ctx.fillStyle = Math.floor(t * 20) % 2 ? '#ffe14a' : '#ff8a2e';
-      ctx.fillRect(W / 2 - 6, sy + 30, 4, 10);
-      ctx.fillRect(W / 2 + 2, sy + 30, 4, 10);
+      const fire = SS.FX.sprite('fire');
+      ctx.globalCompositeOperation = 'lighter';
+      for (const nx of [-4, 4]) ctx.drawImage(fire, MW / 2 + nx - 9, sy + 34, 18, 26 + Math.sin(t * 40) * 3);
+      ctx.globalCompositeOperation = 'source-over';
+      SS.Aircraft.draw(ctx, 'player', MW / 2, sy, 0, { scale: 1.6 });
 
-      Gfx.text(ctx, 'SCORE ' + Gfx.pad(g.score), W / 2, 254, { size: 2, align: 'center' });
-      Gfx.text(ctx, 'LOOP ' + g.loop + ' CLEAR', W / 2, 280, { size: 2, color: '#ffd23a', align: 'center' });
+      Gfx.text(ctx, 'SCORE ' + Gfx.pad(g.score), MW / 2, 254, { size: 2, align: 'center' });
+      Gfx.text(ctx, 'LOOP ' + g.loop + ' CLEAR', MW / 2, 280, { size: 2, color: '#ffd23a', align: 'center' });
     }
   }
 
