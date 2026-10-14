@@ -349,29 +349,58 @@
     }
   }
 
-  // 보스: 140BPM 하프타임 트랩 (E 프리지안), 808 글라이드 + 브라스 리프
-  const B_PROG = [[64, 67, 71], [65, 69, 72], [64, 67, 71], [63, 66, 69]], B_ROOT = [40, 41, 40, 39];
-  const RIFF = phrase([[0, 76, 1], [2, 76, 1], [3, 79, 2], [6, 77, 2], [8, 76, 1], [10, 74, 1], [11, 76, 3], [14, 71, 2]]);
-  const SOAR = phrase([[0, 83, 4], [4, 82, 2], [6, 79, 2], [8, 77, 4], [12, 76, 4]]);
-  function playBoss(sec, bar, s, t, sd) {
-    const i4 = bar % 4, ch = B_PROG[i4], root = B_ROOT[i4], tr = root - 40;
-    const hot = intensity >= 0.45;
-    if (s === 0 || s === 6 || s === 10 || (bar % 2 === 1 && s === 14)) kick(t, 0.42, true);
-    if (s === 8) { clap(t, 0.18); snare(t, 0.1); }
-    if (s === 0 && bar % 4 === 0) crash(t);
-    hat(t, 0.035);
-    if (s >= 12 && bar % 2 === 1) hat(t + sd / 2, 0.03); // 트랩 하이햇 롤
-    if (s === 0) bass808(root, t, sd * 6, 0.22);
-    if (s === 6) bass808(root, t, sd * 4, 0.2);
-    if (s === 10) bass808(root, t, sd * 6, 0.22, root + 12);
-    if (s === 0 || s === 8) stab([root + 24, root + 31, root + 36], t, 0.03);
-    const m = (sec === 'A' ? RIFF : SOAR)[s];
-    if (m) {
-      if (sec === 'A') stab([m[0] + tr], t, 0.05);
-      else supersaw(m[0] + tr, t, m[1] * sd, 0.045, 3000);
+  // 보스: 170BPM 에픽 오케스트라 + EDM (E단조, Em–C–D–B)
+  // 현악 16분음표 오스티나토 · 합창 패드 · 파워 브라스 · 팀파니 탐 필인 · 솟구치는 리드
+  function strings(n, t, vol) {
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass'; f.Q.value = 2; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(900, t + 0.12);
+    const g = ctx.createGain(); env(g, t, vol, 0.004, 0.03, 0.1);
+    for (const d of [-7, 7]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mf(n); o.detune.value = d;
+      o.connect(f); o.start(t); o.stop(t + 0.2);
     }
-    if (hot && s % 2 === 0) pluck(ch[(s / 2) % 3] + 12, t, 0.025, 0.06);
-    if (bar === 7 && s === 0) riser(t, sd * 16, 0.07);
+    f.connect(g); g.connect(ensureBus());
+  }
+  function tom(t, f0, vol) {
+    toneAt(musicBus, 'sine', f0, f0 * 0.55, t, 0.28, vol);
+    noiseAt(musicBus, t, 0.05, vol * 0.3, 1500, 400);
+  }
+  const E_PROG = [[64, 67, 71], [60, 64, 67], [62, 66, 69], [63, 66, 71]], E_ROOT = [40, 36, 38, 35];
+  const OST = [0, 2, 1, 2]; // 화음 구성음 순서 (16분음표 반복)
+  const BRASS = [0, 3, 6, 8, 10, 12, 14];
+  const EPIC = phrase([[0, 83, 6], [6, 81, 2], [8, 79, 4], [12, 78, 4],
+    [16, 79, 6], [22, 78, 2], [24, 76, 4], [28, 72, 4],
+    [32, 74, 4], [36, 78, 4], [40, 81, 4], [44, 86, 4],
+    [48, 87, 8], [56, 86, 4], [60, 83, 4]]);
+  function playBoss(sec, bar, s, t, sd) {
+    const i4 = bar % 4, ch = E_PROG[i4], root = E_ROOT[i4], st = i4 * 16 + s;
+    const hot = intensity >= 0.45, fill = i4 === 3 && s >= 12;
+    // 드럼: 쉬지 않는 킥 + 투베이스, 백비트, 8분 하이햇, 4마디마다 크래시, 탐 필인
+    if (s % 4 === 0 && !fill) kick(t, 0.44, true);
+    if (bar % 2 === 1 && (s === 14 || s === 15)) kick(t, 0.36, true);
+    if ((s === 4 || s === 12) && !fill) { snare(t, 0.13); clap(t, 0.12); }
+    if (s % 2 === 1 || hot) hat(t, s % 4 === 2 ? 0.06 : 0.03, s % 4 === 2);
+    if (i4 === 0 && s === 0) crash(t);
+    if (fill) tom(t, [220, 180, 150, 120][s - 12], 0.32);
+    // 베이스: 8분음표로 몰아치기
+    if (s % 2 === 0) bass808(root + (s % 4 === 2 ? 12 : 0), t, sd * 1.8, 0.17);
+    // 현악 오스티나토 (2옥타브 위, 16분음표)
+    strings(ch[OST[s % 4]] + (s % 8 >= 4 ? 12 : 0), t, 0.026);
+    // 합창 패드 (화음 + 옥타브)
+    if (s === 0) pad([...ch, ch[0] + 12, root + 12], t, sd * 16, 0.022);
+    if (sec === 'A') {
+      // 파워 브라스 리프
+      if (BRASS.includes(s)) stab([root + 24, root + 31, root + 36], t, s === 0 ? 0.05 : 0.035);
+    } else {
+      // 솟구치는 리드 + 브라스는 마디 첫 박만
+      const m = EPIC[st];
+      if (m) {
+        supersaw(m[0], t, m[1] * sd, 0.05, 3600);
+        if (hot) supersaw(m[0] - 12, t, m[1] * sd, 0.025, 2200);
+      }
+      if (s === 0 || s === 8) stab([root + 24, root + 31, root + 36], t, 0.04);
+    }
+    if (sec === 'B' && bar === 7 && s === 0) riser(t, sd * 16, 0.08);
   }
 
   // 타이틀: 100BPM 신스팝 — 같은 화성 위에 후렴 훅을 부드럽게 미리 들려줌
@@ -389,7 +418,7 @@
   const TRACKS = {
     title: { bpm: 100, sections: [['main', 8]], loopFrom: 0, play: playTitle },
     stage: { bpm: 128, sections: [['intro', 4], ['verse', 8], ['pre', 4], ['drop', 8]], loopFrom: 1, play: playStage },
-    boss: { bpm: 140, sections: [['A', 4], ['B', 4]], loopFrom: 0, play: playBoss },
+    boss: { bpm: 170, sections: [['A', 4], ['B', 8], ['A', 4], ['B', 4]], loopFrom: 0, play: playBoss },
   };
 
   // 사용자 음원 (music/list.json 에 파일 이름을 적으면 합성곡 대신 재생)
