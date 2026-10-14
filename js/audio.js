@@ -418,20 +418,33 @@
     if (sec === 'B' && bar === 7 && s === 0) riser(t, sd * 16, 0.08);
   }
 
-  // 타이틀: 100BPM 신스팝 — 같은 화성 위에 후렴 훅을 부드럽게 미리 들려줌
+  // 타이틀: 140BPM 업비트 댄스팝 오프닝 (G장조 G–D–Em–C)
+  //  A: 그루브 + 플럭으로 후렴 훅 예고 / B: 슈퍼소우 훅 + 구호 신스로 분위기 고조
   function playTitle(sec, bar, s, t, sd) {
-    const i4 = bar % 4, ch = PROG[i4], root = ROOT[i4];
-    if (s === 0) pad(ch, t, sd * 16, 0.04);
-    if (s % 2 === 0) pluck(ch[(s / 2) % 3] + 12, t, 0.028, 0.14);
-    if (s === 0 || s === 8 || s === 10) kick(t, 0.26, true);
-    if (bar >= 4 && (s === 4 || s === 12)) clap(t, 0.08);
-    if (s % 4 === 2) hat(t, 0.03);
-    if (s === 0 || s === 10) bass808(root, t, sd * 6, 0.12);
-    if (bar >= 4) { const m = HOOK_A[i4 * 16 + s]; if (m) pluck(m[0], t, 0.05, 0.1 + m[1] * sd * 0.5); }
+    const i4 = bar % 4, st = i4 * 16 + s;
+    const ch = S_PROG[i4], root = S_ROOT[i4];
+    const B = sec === 'B';
+    if (bar === 0 && s === 0) crash(t);
+    if (s % 4 === 0) kick(t, 0.38, true);
+    if (s === 4 || s === 12) { clap(t, B ? 0.16 : 0.12); if (B) snare(t, 0.05); }
+    hat(t, s % 4 === 2 ? 0.06 : 0.025, s % 4 === 2);
+    if (B) hat(t + sd / 2, 0.016);
+    if (s % 4 === 2) bass808(root + 12, t, sd * 1.6, 0.14);           // 엇박 베이스
+    if (s === 0 || s === 8) bass808(root, t, sd * 2, 0.16);
+    if (s === 0) pad(ch, t, sd * 16, 0.026);
+    pluck(ch[s % 3] + 24, t, 0.016, 0.05);                           // 반짝이는 아르페지오
+    if (s === 2 || s === 6 || s === 10 || s === 14) stab(ch.map((n) => n - 12), t, 0.02);
+    const m = (i4 < 2 ? HOOK_A : HOOK_B)[st];
+    if (m) {
+      if (B) supersaw(m[0], t, m[1] * sd, 0.042, 3400);
+      else pluck(m[0], t, 0.055, 0.1 + m[1] * sd * 0.5);
+    }
+    if (B && i4 % 2 === 1 && s === 14) chant(ch, t, 0.045);
+    if (sec === 'A' && bar === 3 && s === 0) riser(t, sd * 16, 0.06);
   }
 
   const TRACKS = {
-    title: { bpm: 100, sections: [['main', 8]], loopFrom: 0, play: playTitle },
+    title: { bpm: 140, sections: [['A', 4], ['B', 4]], loopFrom: 0, play: playTitle },
     stage: { bpm: 150, sections: [['intro', 2], ['verse', 4], ['pre', 4], ['drop', 8], ['drop2', 8]], loopFrom: 1, play: playStage },
     boss: { bpm: 170, sections: [['A', 4], ['B', 8], ['A', 4], ['B', 4]], loopFrom: 0, play: playBoss },
   };
