@@ -194,6 +194,7 @@
       SS.Input.fireButton = state === 'playing' && this.save.fireMode === 'manual' ? SS.UI.FIRE_BTN : null;
       SS.Input.bombButton = state === 'playing' ? SS.UI.BOMB_BTN : null;
       SS.Input.joystick = state === 'playing' && this.save.joystick ? SS.UI.JOY : null;
+      SS.Input.altButtons = state === 'playing' ? SS.UI.ALT : null;
       if (state !== 'playing') { SS.Input.joyId = null; SS.Input.joyX = SS.Input.joyY = 0; }
       SS.UI.layout();
     }
@@ -628,7 +629,7 @@
         if (used) this.pBullets.splice(i, 1);
       }
 
-      if (!p.alive || p.invuln > 0) return;
+      if (!p.alive || p.invuln > 0 || p.evading) return; // 다른 고도로 회피 중
 
       const hr = C.PLAYER.hitRadius;
       for (let i = this.eBullets.length - 1; i >= 0; i--) {

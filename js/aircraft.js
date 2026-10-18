@@ -162,7 +162,13 @@
       g.beginPath(); g.moveTo(x + Math.cos(a) * r * 0.55, y + Math.sin(a) * r * 0.55); g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); g.stroke();
     }
   }
-  function fin(g, pts, c) { // 수직미익 (밝은 면/어두운 면)
+  function soot(g, x, y, r) { // 노즐 주변 배기 그을음
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, 'rgba(20,18,16,0.55)'); gr.addColorStop(1, 'rgba(20,18,16,0)');
+    g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  }
+  function fin(g, pts, c) { // 수직미익 (밝은 면/어두운 면) + 오른쪽 아래로 드리운 그림자
+    g.save(); g.translate(1.6, 1.8); pairPath(g, pts); g.fillStyle = 'rgba(0,0,0,0.3)'; g.fill(); g.restore();
     pairPath(g, pts);
     const gr = g.createLinearGradient(pts[0][0], 0, pts[1][0], 0);
     gr.addColorStop(0, c.light); gr.addColorStop(1, c.dark);
@@ -199,6 +205,7 @@
         g.fillStyle = 'rgba(30,36,46,0.45)';
         for (let y = -3; y < 20; y += 3) { g.fillRect(2.2, y, 0.35, 0.35); g.fillRect(-2.55, y, 0.35, 0.35); }
         canopy(g, 0, -13, 2.15, 5.3); canopyFrame(g, -13, 5.3);
+        soot(g, 2.35, 21.5, 4); soot(g, -2.35, 21.5, 4);
         petals(g, 2.35, 23.4, 2.05); petals(g, -2.35, 23.4, 2.05);
         // 표식: 날개 원형 마크, 꼬리 띠, 항법등
         for (const sx of [1, -1]) {
@@ -233,6 +240,7 @@
         line(g, 4.2, 0.8, 12, 9.6, c.panel, 0.28, true);
         for (const y of [-6, 0, 7]) line(g, 0.8, y, 2.7, y, c.panel, 0.25, true);
         canopy(g, 0, -9.5, 1.5, 3.3); canopyFrame(g, -9.5, 3.3);
+        soot(g, 0, 16, 3.5);
         petals(g, 0, 17.6, 1.75);
         g.fillStyle = '#b8322a';
         pairPath(g, [[11.6, 8.5], [13.6, 9.4], [13.6, 11.3], [11.6, 11.3]]); g.fill();
@@ -261,6 +269,7 @@
         line(g, 0, -8, 0, 19, c.panel, 0.3);
         for (const y of [-3, 4, 11]) line(g, 1.2, y, 4.6, y, c.panel, 0.25, true);
         canopy(g, 0, -13, 1.85, 4.4); canopyFrame(g, -13, 4.4);
+        soot(g, 1.95, 18.5, 3.5); soot(g, -1.95, 18.5, 3.5);
         petals(g, 1.95, 20.2, 1.65); petals(g, -1.95, 20.2, 1.65);
         g.fillStyle = '#ffd23a'; g.fillRect(-0.5, -16.6, 1, 2.2);
       },
@@ -391,11 +400,23 @@
     lg.addColorStop(1, 'rgba(0,0,20,0.28)');
     g.fillStyle = lg;
     g.fillRect(0, 0, c.width, c.height);
+    // 금속 표면 미세 질감 (패널마다 살짝 다른 반사)
+    const nz = document.createElement('canvas');
+    nz.width = nz.height = 64;
+    const ng = nz.getContext('2d'), nd = ng.createImageData(64, 64);
+    for (let i = 0; i < nd.data.length; i += 4) {
+      const v = Math.random() < 0.5 ? 0 : 255;
+      nd.data[i] = nd.data[i + 1] = nd.data[i + 2] = v; nd.data[i + 3] = Math.random() * 22;
+    }
+    ng.putImageData(nd, 0, 0);
+    g.fillStyle = g.createPattern(nz, 'repeat');
+    g.fillRect(0, 0, c.width, c.height);
     g.globalCompositeOperation = 'source-over';
     return {
       img: c, w: d.w, h: d.h,
       shadow: softShadow(c),
       flash: silhouette(c, '#ffffff'),
+      dark: silhouette(c, '#05070c'),
     };
   }
 
@@ -426,13 +447,21 @@
     draw(ctx, type, x, y, rot, opt) {
       opt = opt || {};
       const s = this.get(type, opt.hurt);
-      const k = opt.scale || 1;
+      const k = opt.scale || 1, kx = opt.scaleX || 1;
       ctx.save();
       ctx.imageSmoothingEnabled = true;
       ctx.translate(x, y);
       if (rot) ctx.rotate(rot);
       if (opt.alpha !== undefined) ctx.globalAlpha = opt.alpha;
-      ctx.drawImage(opt.flash ? s.flash : s.img, -s.w * k / 2, -s.h * k / 2, s.w * k, s.h * k);
+      const w = s.w * k * kx, h = s.h * k;
+      ctx.drawImage(opt.flash ? s.flash : s.img, -w / 2, -h / 2, w, h);
+      // 롤: 기운 쪽 날개는 햇빛을 덜 받아 어두워짐
+      if (opt.roll && Math.abs(opt.roll) > 0.05 && !opt.flash) {
+        ctx.globalAlpha = Math.min(0.45, Math.abs(opt.roll) * 0.45);
+        const iw = s.dark.width / 2, ih = s.dark.height;
+        if (opt.roll > 0) ctx.drawImage(s.dark, iw, 0, iw, ih, 0, -h / 2, w / 2, h);   // 오른쪽 날개
+        else ctx.drawImage(s.dark, 0, 0, iw, ih, -w / 2, -h / 2, w / 2, h);           // 왼쪽 날개
+      }
       ctx.restore();
     },
     size(type) { return DESIGNS[type]; },

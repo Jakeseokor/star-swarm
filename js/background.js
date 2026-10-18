@@ -313,6 +313,31 @@
           H[y * gw + x] = f.h !== undefined ? f.h : f.coast;
         }
       }
+      // 앰비언트 오클루전용 평균 높이 (반경 6칸 상자 블러 2회, 세로는 이어지게)
+      const blur = (src) => {
+        const R = 6, tmp = new Float32Array(src.length), out = new Float32Array(src.length);
+        for (let y = 0; y < gh; y++) {
+          let acc = 0;
+          for (let x = -R; x <= R; x++) acc += src[y * gw + Math.min(gw - 1, Math.max(0, x))];
+          for (let x = 0; x < gw; x++) {
+            tmp[y * gw + x] = acc / (2 * R + 1);
+            acc += src[y * gw + Math.min(gw - 1, x + R + 1)] - src[y * gw + Math.max(0, x - R)];
+          }
+        }
+        for (let x = 0; x < gw; x++) {
+          let acc = 0;
+          for (let y = -R; y <= R; y++) acc += tmp[((y + gh) % gh) * gw + x];
+          for (let y = 0; y < gh; y++) {
+            out[y * gw + x] = acc / (2 * R + 1);
+            acc += tmp[((y + R + 1) % gh) * gw + x] - tmp[((y - R + gh) % gh) * gw + x];
+          }
+        }
+        return out;
+      };
+      const Hb = blur(blur(H));
+      const ao = { sea: 3, desert: 2.6, mountain: 3.2, arctic: 1.6, gulfnight: 1.4 }[this.biome];
+      const grade = { sea: [1.1, 1.06], desert: [1.06, 1.08], mountain: [0.92, 1.1], arctic: [0.88, 1.06], gulfnight: [1.0, 1.05] }[this.biome];
+      const sparkle = this.biome === 'sea' || this.biome === 'gulfnight';
       // 언덕 음영 (빛: 왼쪽 위)
       const img = new ImageData(gw, gh);
       const L = [-0.55, -0.55, 0.63];
@@ -326,8 +351,14 @@
           f.slope = Math.sqrt(dx * dx + dy * dy) / Math.max(1, k) * 40;
           const inv = 1 / Math.sqrt(dx * dx + dy * dy + 1);
           const dot = (-dx * L[0] - dy * L[1] + L[2]) * inv;
-          const sh = Math.max(0.35, Math.min(1.35, 0.45 + dot * 0.75));
-          const c = B.color(f, sh);
+          // 오목한 곳(골짜기)은 어둡게, 볼록한 곳(능선)은 밝게
+          const cav = (Hb[y * gw + x] - H[y * gw + x]) * ao * (k > 10 ? 1 : 0.25);
+          const sh = Math.max(0.3, Math.min(1.4, (0.45 + dot * 0.75) * (1 - Math.max(-0.25, Math.min(0.45, cav * 4)))));
+          let c = B.color(f, sh);
+          // 색 보정: 채도·대비 (실사 영상 톤)
+          const lum = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
+          c = c.map((v) => (lum + (v - lum) * grade[0] - 128) * grade[1] + 128);
+          if (sparkle && k < 10 && f.rip > 0.66 && hash(x, y, 77) > 0.86) c = c.map((v) => v + 70 * (f.rip - 0.6)); // 물결 반짝임
           const i = (y * gw + x) * 4;
           img.data[i] = c[0]; img.data[i + 1] = c[1]; img.data[i + 2] = c[2]; img.data[i + 3] = 255;
         }
@@ -344,6 +375,26 @@
       g.imageSmoothingQuality = 'high';
       g.scale(R, R);
       g.drawImage(raw, 0, 0, gw * CELL, TH);
+      // 디테일 맵: 부드러운 고주파 기복을 overlay로 겹쳐 실사 같은 미세 질감
+      const dm = document.createElement('canvas');
+      dm.width = dm.height = 96;
+      const dg = dm.getContext('2d'), dd = dg.createImageData(96, 96);
+      for (let i = 0; i < dd.data.length; i += 4) {
+        const v = 128 + (Math.random() - 0.5) * 120;
+        dd.data[i] = dd.data[i + 1] = dd.data[i + 2] = v; dd.data[i + 3] = 255;
+      }
+      dg.putImageData(dd, 0, 0);
+      const dm2 = document.createElement('canvas');
+      dm2.width = dm2.height = 192;
+      const d2 = dm2.getContext('2d');
+      d2.imageSmoothingEnabled = true;
+      d2.drawImage(dm, 0, 0, 192, 192);
+      g.save();
+      g.globalCompositeOperation = 'overlay';
+      g.globalAlpha = { sea: 0.12, desert: 0.3, mountain: 0.32, arctic: 0.2, gulfnight: 0.15 }[this.biome];
+      g.fillStyle = g.createPattern(dm2, 'repeat');
+      g.fillRect(0, 0, W, TH);
+      g.restore();
       // 사진 같은 미세 입자 질감 (세로 이음매가 없도록 타일 전체에 균일하게)
       const grain = document.createElement('canvas');
       grain.width = grain.height = 128;
@@ -477,9 +528,17 @@
       }
     }
 
-    // 화면 고정 색감 (황혼·야간)
+    // 화면 고정 색감 (황혼·야간) + 렌즈 비네팅
     drawTint(ctx) {
       const W = C.WIDTH, H = C.HEIGHT;
+      if (!this.vig || this.vigW !== W || this.vigH !== H) {
+        this.vig = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.45, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+        this.vig.addColorStop(0, 'rgba(0,0,0,0)');
+        this.vig.addColorStop(1, 'rgba(0,0,8,0.38)');
+        this.vigW = W; this.vigH = H;
+      }
+      ctx.fillStyle = this.vig;
+      ctx.fillRect(0, 0, W, H);
       if (this.biome === 'arctic') {
         const gr = ctx.createLinearGradient(0, 0, 0, H);
         gr.addColorStop(0, 'rgba(255,140,90,0.16)');

@@ -30,6 +30,9 @@
     joystick: null,       // 조그셔틀 영역 {x, y, r} (켜져 있고 게임 중일 때)
     joyId: null,
     joyX: 0, joyY: 0,     // 조그셔틀 기울기 (-1 ~ 1)
+    altButtons: null,     // 상승·하강 버튼 {up:{x,y,r}, dn:{x,y,r}}
+    altUpPressed: false,
+    altDnPressed: false,
     usedKeyboard: false,
     canvas: null,
 
@@ -122,6 +125,13 @@
         this.setJoy(p);
         return;
       }
+      const ab = this.altButtons;
+      if (ab) {
+        for (const [k, b] of [['altUpPressed', ab.up], ['altDnPressed', ab.dn]]) {
+          const dx = p.x - b.x, dy = p.y - b.y, r = b.r + 8;
+          if (dx * dx + dy * dy <= r * r) { this[k] = true; return; }
+        }
+      }
       if (this.inBombButton(p)) {
         this.bombPressed = true;
         return;
@@ -177,6 +187,7 @@
       this.pressed.length = 0;
       this.taps.length = 0;
       this.bombPressed = false;
+      this.altUpPressed = this.altDnPressed = false;
     },
   };
 

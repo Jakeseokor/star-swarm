@@ -134,6 +134,7 @@
   const FIRE_BTN = { x: 0, y: 0, r: 40 };
   const BOMB_BTN = { x: 0, y: 0, r: 32 };
   const JOY = { x: 0, y: 0, r: 54 }; // 조그셔틀 (우측 하단)
+  const ALT = { up: { x: 0, y: 0, r: 22 }, dn: { x: 0, y: 0, r: 22 } }; // 상승·하강 (조그셔틀 왼쪽)
   // 오른손: 조그셔틀 / 왼손: 발사(수동 모드)·폭탄
   function layout() {
     W = C.WIDTH; H = C.HEIGHT;
@@ -141,6 +142,9 @@
     const manual = SS.game && SS.game.save.fireMode === 'manual';
     Object.assign(PAUSE_BTN, { x: W - 52, y: 6 + st });
     Object.assign(JOY, { x: W - 84, y: H - 100 - sb });
+    const ax = W - 84 - 54 - 40;
+    Object.assign(ALT.up, { x: ax, y: H - 100 - sb - 30 });
+    Object.assign(ALT.dn, { x: ax, y: H - 100 - sb + 30 });
     Object.assign(FIRE_BTN, { x: 64, y: H - 84 - sb });
     Object.assign(BOMB_BTN, manual ? { x: 54, y: H - 186 - sb } : { x: 52, y: H - 84 - sb });
   }
@@ -361,7 +365,7 @@
 
       Gfx.ktext(ctx, '대열 / 급강하 중 격추 점수', MW / 2, 350, 11, '#7f8bcf');
       Gfx.ktext(ctx, '터치: 우측 하단 조그셔틀 또는 드래그로 이동 · BOMB 폭탄', MW / 2, 512, 12, '#a9b6ff');
-      Gfx.ktext(ctx, '키보드: 방향키 이동 · Space 발사 · X 폭탄 · P 일시정지', MW / 2, 532, 12, '#a9b6ff');
+      Gfx.ktext(ctx, '키보드: 방향키 이동 · Space 발사 · X 폭탄 · Q/E 상승/하강 · P 일시정지', MW / 2, 532, 12, '#a9b6ff');
       Gfx.ktext(ctx, '1만 점마다 생명 +1 · 캡슐 D=2연발 S=쉴드 R=속사 B=폭탄', MW / 2, 552, 12, '#a9b6ff');
       if (g.save.cleared) Gfx.text(ctx, '* ALL CLEAR *', MW / 2, 576, { size: 2, color: '#ffd23a', align: 'center' });
       Gfx.text(ctx, 'ORIGINAL GAME  V2.0', MW / 2, MH - 26, { size: 1, color: '#55608f', align: 'center' });
@@ -458,6 +462,25 @@
         Gfx.text(ctx, 'X' + g.bombs, BOMB_BTN.x, BOMB_BTN.y - 1, { size: 2, color: has ? '#ffd23a' : '#888899', align: 'center' });
       }
 
+      // 상승·하강 버튼 + 기동 게이지
+      if (g.state === 'playing' || g.state === 'paused') {
+        const tgt = p.altTarget;
+        for (const [b, dir, label] of [[ALT.up, 1, '▲'], [ALT.dn, -1, '▼']]) {
+          const on = tgt === dir;
+          ctx.fillStyle = on ? 'rgba(90,200,255,0.55)' : 'rgba(16,24,48,0.55)';
+          ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+          ctx.lineWidth = 2; ctx.strokeStyle = on ? '#bff0ff' : 'rgba(170,190,255,0.7)'; ctx.stroke();
+          Gfx.ktext(ctx, label, b.x, b.y + 1, 18, on ? '#ffffff' : '#c8d2ff');
+        }
+        // 게이지 (두 버튼 사이 세로 막대)
+        const gx = ALT.up.x - 34, gy = ALT.up.y - 18, gh = ALT.dn.y - ALT.up.y + 36;
+        ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(gx, gy, 6, gh);
+        const f = p.altGauge / 100;
+        ctx.fillStyle = f < C.PLAYER.altMinToStart / 100 ? '#ff6a4a' : tgt ? '#5ef2ff' : '#7ad06a';
+        ctx.fillRect(gx, gy + gh * (1 - f), 6, gh * f);
+        Gfx.text(ctx, tgt > 0 ? 'UP' : tgt < 0 ? 'LOW' : 'ALT', gx + 3, gy - 10, { size: 1, color: '#c8d2ff', align: 'center' });
+      }
+
       // 조그셔틀
       if (g.save.joystick && (g.state === 'playing' || g.state === 'paused')) {
         const inp = SS.Input, j = JOY;
@@ -538,6 +561,7 @@
         [manual ? '오른쪽 아래 FIRE 버튼을 누르고 있으면 발사' : '지금은 자동 연사 중입니다', manual ? '설정에서 자동 연사로 바꿀 수 있어요' : '설정(SETTINGS)에서 수동 발사 버튼으로 변경 가능'],
         ['적들은 곡선으로 날아와 상단에 대열을 짭니다', '급강하하는 적을 맞히면 점수 2배!'],
         ['위급할 땐 폭탄! ' + (kb ? 'X 키' : '왼쪽 아래 BOMB 버튼'), '주변 적과 적 탄을 한 번에 날려 버립니다'],
+        [(kb ? 'Q 상승 · E 하강' : '▲ 상승 · ▼ 하강 버튼') + '으로 적 탄을 피하세요', '다른 고도에선 내 사격도 멈춰요 · 게이지가 다 되면 자동 복귀'],
         ['캡슐을 먹으면 파워업', 'D 2연발 · S 쉴드 · R 속사 · B 폭탄 +1'],
       ];
       const i = Math.floor(tt / 4);
@@ -606,6 +630,7 @@
   UI.FIRE_BTN = FIRE_BTN;
   UI.BOMB_BTN = BOMB_BTN;
   UI.JOY = JOY;
+  UI.ALT = ALT;
   UI.layout = layout;
   UI.PU_COLORS = PU_COLORS;
   UI.PU_LETTER = PU_LETTER;

@@ -27,6 +27,12 @@ SS.CONFIG = {
     speed: 300,                // 키보드 좌우 이동 속도 (px/s)
     vSpeed: 240,               // 키보드 전진·후진 속도 (px/s)
     dragSensitivity: 1.15,     // 터치 드래그 감도 (손가락 이동량 대비)
+    joySpeed: 1.38,            // 조그셔틀 반응 배율 (이동 속도 대비)
+    // 상승·하강 회피 기동: 고도를 벗어나 있으면 적 탄·충돌을 피하지만 사격 불가
+    altChangeRate: 3.2,        // 고도 전환 속도 (단계/초)
+    altDrain: 38,              // 기동 게이지 소모 (초당, 최대 100)
+    altRecharge: 22,           // 평상 고도에서 게이지 충전 (초당)
+    altMinToStart: 30,         // 기동을 시작하려면 필요한 최소 게이지
     margin: 18,
     fireCooldown: 0.30,        // 기본 연사 간격(초)
     rapidCooldown: 0.12,       // 속사 파워업 연사 간격
