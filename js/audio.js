@@ -143,6 +143,13 @@
 
   const SFX = {
     shoot() { noise(0.05, 0.16, 6000, 1500); tone('square', 420, 140, 0.06, 0.06); }, // 기관포
+    missile() { // 미사일 발사: 점화 '탁' + 분사 '슈우욱' + 묵직한 반동
+      noise(0.03, 0.3, 8000, 3000);
+      noise(0.7, 0.32, 900, 6000, 0.02);
+      noise(0.5, 0.18, 3000, 600, 0.25);
+      tone('sawtooth', 90, 45, 0.25, 0.12);
+      tone('triangle', 300, 1200, 0.45, 0.04, 0.03);
+    },
     hit() { tone('square', 420, 180, 0.07, 0.12); },
     enemyDie() { noise(0.45, 0.45, 3500, 120); tone('triangle', 180, 35, 0.35, 0.22); tone('square', 90, 30, 0.25, 0.06, 0.02); },
     dive() { tone('triangle', 1400, 260, 0.5, 0.09); },
@@ -336,34 +343,49 @@
   // 클래식 명곡 편곡 (모두 저작권 보호기간이 끝난 퍼블릭 도메인 작품)
   // =================================================================
 
-  // ===== 타이틀: 베토벤 교향곡 5번 c단조 '운명' 1악장 (1808) — 2/4박자 =====
-  // 따따따 딴— 동기 → 현악이 동기를 주고받으며 쌓아 올리는 전개 → 전체 합주
-  const B5_OPEN = phrase([[2, 67, 2], [4, 67, 2], [6, 67, 2], [8, 63, 14], [26, 65, 2], [28, 65, 2], [30, 65, 2], [32, 62, 14]]);
-  const B5_PAIRS = [[67, 63], [68, 67], [75, 72], [67, 62], [68, 67], [77, 74], [75, 72], [79, 75]];
-  const B5_HARM = [[48, 51, 55], [48, 51, 55], [48, 51, 55], [43, 47, 50], [41, 44, 48], [43, 47, 50], [48, 51, 55], [43, 47, 50]];
-  const B5_TUTTI = phrase([[2, 67, 2], [4, 67, 2], [6, 67, 2], [8, 63, 6], [18, 65, 2], [20, 65, 2], [22, 65, 2], [24, 62, 6],
-    [34, 67, 2], [36, 67, 2], [38, 67, 2], [40, 63, 2], [42, 68, 2], [44, 68, 2], [46, 68, 2], [48, 67, 4], [56, 60, 8]]);
+  // ===== 타이틀: 바흐 〈토카타와 푸가 d단조〉 BWV 565 — 파이프 오르간 + 오케스트라 =====
+  // 도입: 높은 A의 꾸밈음 '따라란—' 과 하강 음형을 세 옥타브에 걸쳐 → 감7화음 상승 → d단조 대화음
+  // 토카타: A음을 축으로 빠르게 오가는 음형 위에 북과 현이 쌓임
+  function organ(n, t, dur, vol) { // 파이프 오르간: 기음 + 옥타브 + 12도 배음 (풍성한 스톱)
+    const g = ctx.createGain(); env(g, t, vol, 0.025, Math.max(0.02, dur - 0.05), 0.25);
+    for (const [k, type, v] of [[0, 'sine', 1], [12, 'sine', 0.6], [19, 'sine', 0.35], [24, 'triangle', 0.25], [-12, 'sine', 0.5]]) {
+      const og = ctx.createGain(); og.gain.value = v;
+      osc(type, n + k, t, dur + 0.25, og); og.connect(g);
+    }
+    g.connect(inst);
+  }
+  // 한 프레이즈(2마디 = 32틱): A G A— / G F E D C# / D—
+  const TOC_PH = [[0, 69, 1], [1, 67, 1], [2, 69, 10], [12, 67, 1], [13, 65, 1], [14, 64, 1], [15, 62, 1], [16, 61, 3], [19, 62, 13]];
+  const TOC_INTRO = (() => {
+    const ev = [];
+    for (const [k, oct] of [[0, 12], [1, 0], [2, -12]]) for (const [st, n, l] of TOC_PH) ev.push([k * 32 + st, n + oct, l]);
+    // 감7화음 상승 아르페지오 (C# E G B♭) → d단조 대화음
+    [49, 52, 55, 58, 61, 64, 67, 70, 73, 76, 79, 82].forEach((n, i) => ev.push([96 + i * 2, n, 2]));
+    return phrase(ev);
+  })();
+  const TOC_FIG = [69, 67, 69, 65, 69, 64, 69, 62, 69, 61, 69, 62, 69, 64, 69, 65]; // A를 축으로 오가는 토카타 음형
+  const TOC_CH = [[50, 53, 57], [49, 52, 55, 58], [50, 53, 57], [45, 49, 52]];  // Dm – C#dim7 – Dm – A
   function playTitle(sec, bar, s, t, sd) {
     buildBuses();
-    if (sec === 'open') {
-      const st = bar * 8 + s, m = B5_OPEN[st];
-      if (m) tutti(m[0], t, m[1] * sd, 0.05, [-24, -12, 0, 12]);
-      if (st === 8 || st === 32) timpani(m ? 36 : 36, t, 0.3);
-      if (bar === 6 && s === 0) timpRoll(t, sd * 16, 0.32);           // 정적 속에서 북이 차오름
-    } else if (sec === 'dev') {
-      const pi = Math.floor(bar / 2), [x, y] = B5_PAIRS[pi], h = B5_HARM[pi];
-      if (bar % 2 === 0) {
-        if (s === 2 || s === 4 || s === 6) spiccato(x, t, 0.06, 3200);
-        if (s === 0) { strings(h, t, sd * 16, 0.016, true); timpani(h[0] - 12, t, 0.26); sub(h[0] - 12, t, sd * 16, 0.1); }
-      } else if (s === 0) { horn(y, t, sd * 6, 0.045); spiccato(y - 12, t, 0.05); }
-      if (pi >= 6 && s % 2 === 0) spiccato(h[0], t, 0.03);              // 끝으로 갈수록 저음 현이 몰아침
-      if (pi === 7 && bar % 2 === 1 && s === 0) riser(t, sd * 8, 0.06);
-    } else { // tutti
-      const st = bar * 8 + s, m = B5_TUTTI[st];
-      if (m) tutti(m[0], t, m[1] * sd, 0.06, [-24, -12, 0, 12]);
-      if (st === 0) { cymbal(t, 0.12); braam(36, t, sd * 16, 0.05); }
-      if (m && m[1] >= 4) timpani(36, t, 0.34);
-      if (st === 56) { taiko(t, 0.45, true); choir([60, 63, 67], t, sd * 8, 0.022); }
+    if (sec === 'intro') {
+      const st = bar * 16 + s, m = TOC_INTRO[st];
+      if (m) organ(m[0], t, m[1] * sd, 0.045);
+      if (st === 2 || st === 34 || st === 66) timpani(st === 66 ? 26 : 38, t, 0.26);       // 꾸밈음 뒤 낮은 울림
+      if (st === 66) organ(26, t, sd * 30, 0.05);                                       // 페달 D
+      if (st === 96) { strings([49, 52, 55, 58], t, sd * 24, 0.012, true); timpRoll(t, sd * 24, 0.28); }
+      if (st === 120) {                                                                  // d단조 대화음 (페르마타)
+        for (const n of [38, 50, 53, 57, 62, 65, 69]) organ(n, t, sd * 40, 0.035);
+        cymbal(t, 0.1); braam(26, t, sd * 32, 0.05); timpani(26, t, 0.36);
+      }
+    } else { // toccata
+      const i4 = bar % 4, ch = TOC_CH[i4];
+      organ(TOC_FIG[s] + (bar >= 4 ? 12 : 0), t, sd * 0.9, 0.04);
+      if (s === 0) { organ(ch[0] - 12, t, sd * 16, 0.04); strings(ch.map((n) => n + 12), t, sd * 16, 0.01, true); }
+      if (s % 4 === 0) { pizz(ch[0] - 12, t, 0.05); }
+      if (bar >= 2 && (s === 0 || s === 8)) timpani(ch[0] - 12, t, 0.24);
+      if (bar >= 4 && s % 4 === 2) taiko(t, 0.18, false);
+      if (bar >= 6 && (s === 4 || s === 12)) snareMil(t, 0.06);
+      if (bar === 7 && s === 0) riser(t, sd * 16, 0.06);
     }
   }
 
@@ -462,7 +484,7 @@
 
   // div: 한 박의 세분 수, beats: 마디당 박 수, accel: 반복마다 빨라짐
   const TRACKS = {
-    title: { bpm: 108, beats: 2, div: 4, sections: [['open', 8], ['dev', 16], ['tutti', 8]], loopFrom: 0, play: playTitle },
+    title: { bpm: 84, beats: 4, div: 4, sections: [['intro', 10], ['toccata', 8]], loopFrom: 0, play: playTitle },
     stage: { bpm: 120, beats: 4, div: 4, accel: { step: 12, max: 180 }, sections: [['A', 8], ['B', 8], ['C', 8]], loopFrom: 0, play: playStage },
     boss: { bpm: 160, beats: 3, div: 4, sections: [['storm', 4], ['chords', 4], ['run', 4], ['climax', 4]], loopFrom: 0, play: playBoss },
   };

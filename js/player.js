@@ -119,7 +119,17 @@
       if (!canFire || this.evading) return; // 다른 고도에서는 사격이 닿지 않음
       const auto = this.game.save.fireMode === 'auto';
       const want = auto || inp.keys.fire || inp.fireHeld;
-      if (want && this.cool <= 0 && this.game.pBullets.length < this.maxBullets) this.fire();
+      let guns = 0;
+      for (const b of this.game.pBullets) if (!b.missile) guns++;
+      if (want && this.cool <= 0 && guns < this.maxBullets) this.fire();
+      // 공격 미사일: 사격 중 일정 간격으로 양쪽 날개 밑에서 발사
+      this.mcool = (this.mcool || 0) - dt;
+      if (want && this.mcool <= 0) {
+        this.mcool = P.missileCooldown;
+        SS.Bullet.missile(this.game, this.x - 12, this.y + 2, -1);
+        SS.Bullet.missile(this.game, this.x + 12, this.y + 2, 1);
+        SS.Audio.play('missile');
+      }
     }
 
     fire() {

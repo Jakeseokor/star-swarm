@@ -531,6 +531,7 @@
         if (this.gameOverDelay < 0) { this.gameOver(); return; }
       }
 
+      SS.Bullet.updateMissiles(this, dt);
       SS.Bullet.update(this.pBullets, dt);
       SS.Bullet.update(this.eBullets, dt);
       this.updatePowerups(dt);
@@ -610,7 +611,7 @@
           if (dx * dx + dy * dy < rr * rr) {
             used = true;
             this.hits++;
-            if (e.hit(C.PLAYER.damage)) this.onEnemyKilled(e);
+            if (e.hit(b.missile ? C.PLAYER.missileDamage : C.PLAYER.damage)) this.onEnemyKilled(e);
             else this.explode(b.x, b.y, ['#ffffff', '#5ef2ff'], 5, 80, 0.25);
             break;
           }
@@ -618,7 +619,7 @@
         const boss = st.boss;
         if (!used && boss && !boss.dead && boss.state !== 'dying' && boss.contains(b.x, b.y)) {
           used = true;
-          const r = boss.hit(C.PLAYER.damage);
+          const r = boss.hit(b.missile ? C.PLAYER.missileDamage : C.PLAYER.damage);
           if (r === 'block') this.explode(b.x, b.y, ['#9fb0ff'], 3, 60, 0.2);
           else {
             this.hits++;

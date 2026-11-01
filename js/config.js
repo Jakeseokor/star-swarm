@@ -43,6 +43,8 @@ SS.CONFIG = {
     rapidMaxBullets: 5,
     bulletSpeed: 670,          // 탄속 (무기 강화 +20%)
     damage: 2,                 // ★ 무기 세기: 탄 1발 피해 (기존 1 → 2배)
+    missileCooldown: 1.4,      // 공격 미사일 발사 간격 (초, 사격 중 날개 밑에서 2발)
+    missileDamage: 2,
     respawnDelay: 1.8,
     invulnTime: 2.2,           // 등장 직후 무적 시간
     hitRadius: 6,              // 피격 판정 반경 (작을수록 관대)

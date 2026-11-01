@@ -14,6 +14,40 @@
       game.pBullets.push({ x, y, vx: 0, vy: -C.PLAYER.bulletSpeed, r: 3 });
     },
 
+    // 공격 미사일: 처음엔 옆으로 살짝 떨어진 뒤 점화, 가속하며 가장 가까운 적을 향해 휨
+    missile(game, x, y, side) {
+      game.pBullets.push({ x, y, vx: side * 60, vy: -60, r: 4, missile: true, t: 0, ang: -Math.PI / 2 });
+    },
+
+    updateMissiles(game, dt) {
+      const st = game.stage;
+      for (const b of game.pBullets) {
+        if (!b.missile) continue;
+        b.t += dt;
+        if (b.t > 0.12) {
+          // 목표: 앞쪽(위)에서 가장 가까운 적 또는 보스
+          let tgt = null, best = 1e9;
+          if (st) {
+            for (const e of st.enemies) {
+              if (!e.active || e.y > b.y) continue;
+              const d = Math.hypot(e.x - b.x, e.y - b.y);
+              if (d < best) { best = d; tgt = e; }
+            }
+            if (!tgt && st.boss && !st.boss.dead) tgt = st.boss;
+          }
+          const want = tgt ? Math.atan2(tgt.y - b.y, tgt.x - b.x) : -Math.PI / 2;
+          let d = want - b.ang;
+          while (d > Math.PI) d -= Math.PI * 2;
+          while (d < -Math.PI) d += Math.PI * 2;
+          b.ang += Math.max(-4 * dt, Math.min(4 * dt, d));        // 선회 한계
+          const sp = Math.min(640, 160 + b.t * 900);                // 가속
+          b.vx = Math.cos(b.ang) * sp;
+          b.vy = Math.sin(b.ang) * sp;
+          if (Math.random() < 0.7) game.trail(b.x - Math.cos(b.ang) * 8, b.y - Math.sin(b.ang) * 8);
+        }
+      }
+    },
+
     // angle: 라디안 (PI/2 = 아래), speed는 회차 배율이 자동 적용됨
     enemy(game, x, y, angle, speed, style) {
       if (game.eBullets.length >= C.MAX_ENEMY_BULLETS) return;
@@ -64,9 +98,27 @@
     drawPlayer(ctx, list) {
       const glow = SS.FX.sprite('tracer');
       ctx.globalCompositeOperation = 'lighter';
-      for (const b of list) ctx.drawImage(glow, b.x - 8, b.y - 14, 16, 30);
+      for (const b of list) if (!b.missile) ctx.drawImage(glow, b.x - 8, b.y - 14, 16, 30);
       ctx.globalCompositeOperation = 'source-over';
+      const fire = SS.FX.sprite('fire');
       for (const b of list) {
+        if (!b.missile) continue;
+        // 미사일: 흰 동체 + 붉은 탄두 + 꼬리날개 + 분사 불꽃
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        ctx.rotate(b.ang + Math.PI / 2);
+        if (b.t > 0.12) {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.drawImage(fire, -5, 5, 10, 14 + Math.random() * 4);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+        ctx.fillStyle = '#e9ecef'; ctx.fillRect(-1.3, -6, 2.6, 12);
+        ctx.fillStyle = '#c8323c'; ctx.beginPath(); ctx.moveTo(-1.3, -6); ctx.lineTo(0, -9); ctx.lineTo(1.3, -6); ctx.fill();
+        ctx.fillStyle = '#7b818c'; ctx.fillRect(-3, 4, 6, 1.6);
+        ctx.restore();
+      }
+      for (const b of list) {
+        if (b.missile) continue;
         // 예광탄: 꼬리가 긴 노란 탄
         const gr = ctx.createLinearGradient(0, b.y - 8, 0, b.y + 14);
         gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.3, '#ffe14a'); gr.addColorStop(1, 'rgba(255,140,40,0)');
