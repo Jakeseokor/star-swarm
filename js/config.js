@@ -15,6 +15,9 @@ SS.CONFIG = {
   MAX_DT: 1 / 30,              // 프레임이 끊겨도 한 번에 진행할 최대 시간(초)
   STORAGE_KEY: 'starSwarm.save.v1',
 
+  // ★ 난이도 배율 (1 = 기존, 2 = 2배). 아래 STAGES·적 탄·보스 수치에 자동 적용
+  DIFFICULTY: 2,
+
   START_LIVES: 3,              // 시작 생명 (현재 기체 포함)
   EXTRA_LIFE_EVERY: 10000,     // 이 점수마다 생명 +1
   MAX_LIVES: 9,
@@ -38,7 +41,8 @@ SS.CONFIG = {
     rapidCooldown: 0.12,       // 속사 파워업 연사 간격
     maxBullets: 2,             // 화면에 동시에 존재 가능한 아군 탄 수
     rapidMaxBullets: 5,
-    bulletSpeed: 560,
+    bulletSpeed: 670,          // 탄속 (무기 강화 +20%)
+    damage: 2,                 // ★ 무기 세기: 탄 1발 피해 (기존 1 → 2배)
     respawnDelay: 1.8,
     invulnTime: 2.2,           // 등장 직후 무적 시간
     hitRadius: 6,              // 피격 판정 반경 (작을수록 관대)
@@ -48,9 +52,9 @@ SS.CONFIG = {
     start: 3,                  // 시작 시 보유 폭탄
     minAfterDeath: 2,          // 기체를 잃으면 최소 이만큼은 다시 채워 줌
     max: 5,
-    radius: 300,               // 충격파 최대 반경 (px)
+    radius: 380,               // 충격파 최대 반경 (px, 무기 강화)
     duration: 0.6,             // 충격파가 퍼지는 시간 (초)
-    bossDamage: 5,             // 보스에게 주는 피해
+    bossDamage: 10,            // 보스에게 주는 피해 (무기 강화 2배)
     invuln: 1.0,               // 사용 직후 무적 시간
   },
 
@@ -159,6 +163,23 @@ SS.CONFIG = {
     },
   ],
 };
+
+// ---- 난이도 배율 적용 (DIFFICULTY 하나로 전체 조절) ----
+(function applyDifficulty(C) {
+  const D = C.DIFFICULTY;
+  if (D === 1) return;
+  for (const st of C.STAGES) {
+    st.diveInterval /= D;                                          // 급강하 빈도 ×D
+    st.formationFireRate = Math.max(st.formationFireRate * D, 0.08 * (D - 1)); // 대열 사격 ×D
+    st.diveShotChance = Math.min(1, st.diveShotChance * D);        // 급강하 중 사격 확률 ×D
+    st.extraShot = Math.min(0.9, 0.35 * (D - 1));                  // 연속 사격 확률
+    st.divers = [st.divers[0], st.divers[1] + (D - 1)];            // 동시 급강하 기체 +1
+    st.baseSpeed *= 1 + 0.15 * (D - 1);                            // 비행 속도 +15%
+  }
+  C.ENEMY_BULLET_SPEED *= 1 + 0.2 * (D - 1);                       // 적 탄 속도 +20%
+  C.BOSS.hp *= D;                                                  // 보스 체력 ×D
+  C.BOSS.fireMul = 1 + 0.5 * (D - 1);                              // 보스 사격 속도 ×1.5
+})(SS.CONFIG);
 
 // ---- 화면 크기 변경 알림 ----
 SS.view = { listeners: [], safeTop: 0, safeBottom: 0, scale: 1 };

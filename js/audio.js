@@ -308,98 +308,140 @@
   }
   const phrase = (ev) => { const m = {}; for (const [st, n, l] of ev) m[st] = [n, l]; return m; };
 
-  // ===== 스테이지: "Into the Fire" — 132BPM, D단조 Dm–B♭–Gm–A =====
-  const ST_CH = [[62, 65, 69], [58, 62, 65], [55, 58, 62], [57, 61, 64]];
-  const ST_ROOT = [50, 46, 43, 45];
-  const OSTI = [0, 0, 12, 0, 0, 12, 0, 7, 0, 0, 12, 0, 7, 0, 12, 10]; // 저음 오스티나토
-  const MAIN_MEL = phrase([[0, 69, 6], [6, 72, 2], [8, 74, 8], [16, 77, 6], [22, 76, 2], [24, 74, 4], [28, 72, 4],
-    [32, 70, 8], [40, 74, 4], [44, 72, 4], [48, 73, 8], [56, 76, 8]]);
-  const CLIMAX_MEL = phrase([[0, 81, 4], [4, 77, 4], [8, 74, 8], [16, 82, 6], [22, 81, 2], [24, 79, 4], [28, 77, 4],
-    [32, 79, 8], [40, 82, 4], [44, 81, 4], [48, 85, 8], [56, 81, 8]]);
-  function playStage(sec, bar, s, t, sd) {
-    buildBuses();
-    const i4 = bar % 4, st = i4 * 16 + s, ch = ST_CH[i4], root = ST_ROOT[i4];
-    const hot = intensity >= 0.45;
-    const lvl = { intro: 0, build: 1, main: 2, climax: 3 }[sec];
-    // 저음 현악 오스티나토 (항상)
-    spiccato(root + OSTI[s] - 12, t, 0.05 + lvl * 0.008);
-    if (lvl >= 1) spiccato(root + OSTI[s], t, 0.03, 2400);
-    if (s % 2 === 0) tick(t, 0.025);
-    if (s === 0) sub(root - 12, t, sd * 16, 0.13);
-    if (sec === 'intro' && bar === 0 && s === 0) braam(root - 12, t, sd * 16, 0.07);
-    if (sec === 'intro' && bar === 3 && s === 0) riser(t, sd * 16, 0.05);
-    if (lvl >= 1) { // 태고 전쟁 북
-      if (s === 0 || s === 8) taiko(t, 0.42, true);
-      if (s === 3 || s === 6 || s === 11) taiko(t, 0.26, false);
-      if (lvl >= 2 && (s === 4 || s === 12)) { snareMil(t, 0.09); anvil(t, 0.12); }
-      if (lvl >= 2 && s === 14) taiko(t, 0.24, false);
+  // ---- 추가 악기 ----
+  function pizz(n, t, vol) { // 피치카토 (현을 손가락으로 튕김)
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(2200, t); f.frequency.exponentialRampToValueAtTime(300, t + 0.25);
+    const g = ctx.createGain(); env(g, t, vol, 0.003, 0.01, 0.28);
+    osc('triangle', n, t, 0.35, f); osc('sawtooth', n, t, 0.35, f, 4);
+    f.connect(g); g.connect(inst);
+  }
+  function timpani(n, t, vol) { // 음정 있는 팀파니
+    const g = ctx.createGain(); env(g, t, vol, 0.004, 0.05, 0.9);
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(mf(n) * 1.5, t); o.frequency.exponentialRampToValueAtTime(mf(n), t + 0.06);
+    o.connect(g); g.connect(drums); o.start(t); o.stop(t + 1.1);
+    noiseAt(drums, t, 0.06, vol * 0.4, 1200, 300);
+  }
+  function cymbal(t, vol) { noiseAt(drums, t, 2.2, vol, 9000, 4500, 'highpass'); }
+  // 투티: 같은 음을 여러 옥타브로 (현 + 호른)
+  function tutti(n, t, dur, vol, octs) {
+    for (const o of octs || [-12, 0, 12]) {
+      if (dur <= 0.32) spiccato(n + o, t, vol * 0.8, 3000);
+      else strings([n + o], t, dur, vol * 0.45, false);
     }
-    if (lvl >= 2) {
-      if (s === 0) choir(ch.map((n) => n - 12), t, sd * 16, 0.016);
-      const m = (sec === 'climax' ? CLIMAX_MEL : MAIN_MEL)[st];
-      if (m) horn(m[0] - (sec === 'climax' ? 0 : 0), t, m[1] * sd, 0.05);
-      if (i4 === 0 && s === 0 && (sec === 'climax' || bar === 0)) braam(root - 12, t, sd * 12, 0.06);
-    }
-    if (sec === 'climax') {
-      if (s === 0) strings(ch.map((n) => n + 12), t, sd * 16, 0.012, true); // 높은 현 트레몰로
-      if (i4 === 3 && s === 8) timpRoll(t, sd * 8, 0.3);
-    }
-    if (hot) { // 긴장도 레이어
-      if (s % 4 === 2) taiko(t, 0.18, false);
-      if (s === 0 && lvl < 3) strings(ch.map((n) => n + 12), t, sd * 16, 0.009, true);
-    }
-    if (sec === 'build' && bar === 3 && s === 0) { riser(t, sd * 16, 0.07); timpRoll(t + sd * 8, sd * 8, 0.3); }
+    if (dur > 0.32) horn(n - 12, t, dur, vol * 0.7);
   }
 
-  // ===== 보스: "Last Stand" — 148BPM, D 프리지안 Dm–E♭–B♭–A =====
-  const BS_CH = [[62, 65, 69], [63, 67, 70], [58, 62, 65], [57, 61, 64]];
-  const BS_ROOT = [50, 51, 46, 45];
-  const BOSS_MEL = phrase([[0, 62, 4], [4, 63, 4], [8, 62, 8], [16, 63, 4], [20, 65, 4], [24, 67, 8],
-    [32, 70, 6], [38, 69, 2], [40, 67, 8], [48, 69, 8], [56, 73, 8]]);
-  function playBoss(sec, bar, s, t, sd) {
-    buildBuses();
-    const i4 = bar % 4, st = i4 * 16 + s, ch = BS_CH[i4], root = BS_ROOT[i4];
-    const B = sec === 'B', hot = intensity >= 0.45;
-    // 두 겹 오스티나토 (저음 + 옥타브 위 엇갈림)
-    spiccato(root + OSTI[s] - 12, t, 0.06);
-    spiccato(root + OSTI[(s + 2) % 16], t, 0.035, 2600);
-    if (s === 0) { sub(root - 12, t, sd * 16, 0.15); braam(root - 12, t, sd * (B ? 8 : 12), 0.06); }
-    // 몰아치는 태고 + 군악 스네어
-    if (s % 4 === 0) taiko(t, 0.44, true);
-    if (s % 4 === 2 || (B && s % 2 === 1)) taiko(t, 0.22, false);
-    if (s === 4 || s === 12) { snareMil(t, 0.12); anvil(t, 0.14); }
-    if (i4 === 3 && s >= 12) snareMil(t, 0.06 + (s - 12) * 0.03);
-    tick(t, 0.03);
-    if (B) {
-      if (s === 0) { choir(ch, t, sd * 16, 0.02); strings(ch.map((n) => n + 12), t, sd * 16, 0.013, true); }
-      const m = BOSS_MEL[st]; if (m) { horn(m[0] + 12, t, m[1] * sd, 0.055); horn(m[0], t, m[1] * sd, 0.035); }
-      if (bar === 7 && s === 0) riser(t, sd * 16, 0.08);
-    } else {
-      const m = BOSS_MEL[st]; if (m) horn(m[0], t, m[1] * sd, 0.045);
-    }
-    if (hot && s === 8) braam(root - 12, t, sd * 6, 0.04);
-  }
+  // =================================================================
+  // 클래식 명곡 편곡 (모두 저작권 보호기간이 끝난 퍼블릭 도메인 작품)
+  // =================================================================
 
-  // ===== 타이틀: "Briefing" — 88BPM, 째깍이는 긴장 속 멀리서 들리는 호른 =====
-  const TI_CH = [[62, 65, 69], [58, 62, 65], [55, 58, 62], [57, 61, 64]];
-  const TI_ROOT = [50, 46, 43, 45];
-  const CALL = phrase([[0, 62, 8], [8, 69, 8], [16, 70, 8], [24, 69, 4], [28, 67, 4], [32, 65, 8], [40, 64, 8], [48, 62, 16]]);
+  // ===== 타이틀: 베토벤 교향곡 5번 c단조 '운명' 1악장 (1808) — 2/4박자 =====
+  // 따따따 딴— 동기 → 현악이 동기를 주고받으며 쌓아 올리는 전개 → 전체 합주
+  const B5_OPEN = phrase([[2, 67, 2], [4, 67, 2], [6, 67, 2], [8, 63, 14], [26, 65, 2], [28, 65, 2], [30, 65, 2], [32, 62, 14]]);
+  const B5_PAIRS = [[67, 63], [68, 67], [75, 72], [67, 62], [68, 67], [77, 74], [75, 72], [79, 75]];
+  const B5_HARM = [[48, 51, 55], [48, 51, 55], [48, 51, 55], [43, 47, 50], [41, 44, 48], [43, 47, 50], [48, 51, 55], [43, 47, 50]];
+  const B5_TUTTI = phrase([[2, 67, 2], [4, 67, 2], [6, 67, 2], [8, 63, 6], [18, 65, 2], [20, 65, 2], [22, 65, 2], [24, 62, 6],
+    [34, 67, 2], [36, 67, 2], [38, 67, 2], [40, 63, 2], [42, 68, 2], [44, 68, 2], [46, 68, 2], [48, 67, 4], [56, 60, 8]]);
   function playTitle(sec, bar, s, t, sd) {
     buildBuses();
-    const i4 = bar % 4, ch = TI_CH[i4], root = TI_ROOT[i4];
-    tick(t, s % 4 === 0 ? 0.05 : 0.025);                             // 시계 초침
-    if (s % 2 === 0) spiccato(root - 12 + (s % 8 === 6 ? 12 : 0), t, 0.04, 1200);
-    if (s === 0) { strings(ch.map((n) => n - 12), t, sd * 16, 0.016); sub(root - 12, t, sd * 16, 0.1); }
-    if (s === 0 || (bar % 2 === 1 && s === 10)) taiko(t, 0.3, true);
-    if ((bar === 0 || bar === 4) && s === 0) braam(root - 12, t, sd * 16, 0.055);
-    if (bar >= 4) { const m = CALL[i4 * 16 + s]; if (m) horn(m[0], t, m[1] * sd, 0.05); }
-    if (bar === 7 && s === 0) riser(t, sd * 16, 0.05);
+    if (sec === 'open') {
+      const st = bar * 8 + s, m = B5_OPEN[st];
+      if (m) tutti(m[0], t, m[1] * sd, 0.05, [-24, -12, 0, 12]);
+      if (st === 8 || st === 32) timpani(m ? 36 : 36, t, 0.3);
+      if (bar === 6 && s === 0) timpRoll(t, sd * 16, 0.32);           // 정적 속에서 북이 차오름
+    } else if (sec === 'dev') {
+      const pi = Math.floor(bar / 2), [x, y] = B5_PAIRS[pi], h = B5_HARM[pi];
+      if (bar % 2 === 0) {
+        if (s === 2 || s === 4 || s === 6) spiccato(x, t, 0.06, 3200);
+        if (s === 0) { strings(h, t, sd * 16, 0.016, true); timpani(h[0] - 12, t, 0.26); sub(h[0] - 12, t, sd * 16, 0.1); }
+      } else if (s === 0) { horn(y, t, sd * 6, 0.045); spiccato(y - 12, t, 0.05); }
+      if (pi >= 6 && s % 2 === 0) spiccato(h[0], t, 0.03);              // 끝으로 갈수록 저음 현이 몰아침
+      if (pi === 7 && bar % 2 === 1 && s === 0) riser(t, sd * 8, 0.06);
+    } else { // tutti
+      const st = bar * 8 + s, m = B5_TUTTI[st];
+      if (m) tutti(m[0], t, m[1] * sd, 0.06, [-24, -12, 0, 12]);
+      if (st === 0) { cymbal(t, 0.12); braam(36, t, sd * 16, 0.05); }
+      if (m && m[1] >= 4) timpani(36, t, 0.34);
+      if (st === 56) { taiko(t, 0.45, true); choir([60, 63, 67], t, sd * 8, 0.022); }
+    }
   }
 
+  // ===== 스테이지: 그리그 〈페르 귄트〉 '산왕의 궁전에서' (1875) — b단조, 반복할수록 빨라짐 =====
+  // A: 낮은 피치카토로 살금살금 → 현악이 이어받음 / B: 5도 위(f#단조)로 커짐 / C: 전체 합주 최강음
+  const MK = phrase([[0, 59, 2], [2, 61, 2], [4, 62, 2], [6, 64, 2], [8, 66, 2], [10, 62, 2], [12, 66, 4],
+    [16, 65, 2], [18, 61, 2], [20, 65, 4], [24, 64, 2], [26, 60, 2], [28, 64, 4],
+    [32, 59, 2], [34, 61, 2], [36, 62, 2], [38, 64, 2], [40, 66, 2], [42, 62, 2], [44, 66, 2], [46, 71, 2],
+    [48, 69, 2], [50, 66, 2], [52, 62, 2], [54, 66, 2], [56, 69, 8]]);
+  const MK_BASS = [47, 42, 47, 42]; // B · F# 교대
+  function playStage(sec, bar, s, t, sd) {
+    buildBuses();
+    const i4 = bar % 4, st = i4 * 16 + s;
+    const tr = sec === 'B' ? 7 : 0;
+    const m = MK[st];
+    const bass = MK_BASS[i4] + tr;
+    const hot = intensity >= 0.45;
+    if (sec === 'A') {
+      if (bar < 4) { if (m) pizz(m[0] - 12, t, 0.07); }                 // 바순·첼로 피치카토
+      else { if (m) spiccato(m[0], t, 0.05, 2400); if (m) pizz(m[0] - 12, t, 0.04); }
+      if (s % 4 === 0) pizz(bass - (s % 8 === 0 ? 0 : -7) - 12, t, 0.05);
+      if (s === 0 || s === 8) timpani(bass - 12, t, 0.14);
+    } else if (sec === 'B') {
+      if (m) { spiccato(m[0] + tr, t, 0.055, 3000); spiccato(m[0] + tr - 12, t, 0.045); if (m[1] >= 4) horn(m[0] + tr - 12, t, m[1] * sd, 0.04); }
+      if (s % 2 === 0) pizz(bass - 12 + (s % 4 === 2 ? 7 : 0), t, 0.05);
+      if (s % 4 === 0) timpani(bass - 12, t, 0.2);
+      if (s % 2 === 1) snareMil(t, 0.025);
+      if (s === 0 && i4 === 0) strings([bass, bass + 7], t, sd * 32, 0.012, true);
+    } else { // C: 최강음 합주
+      if (m) tutti(m[0], t, m[1] * sd, 0.06, [-12, 0, 12]);
+      if (s % 2 === 0) spiccato(bass - 12 + (s % 4 === 2 ? 7 : 0), t, 0.05);
+      if (s % 4 === 0) { timpani(bass - 12, t, 0.3); taiko(t, s % 8 === 0 ? 0.36 : 0.22, s % 8 === 0); }
+      if (s === 4 || s === 12) { snareMil(t, 0.08); anvil(t, 0.1); }
+      if (s === 0 && i4 === 0) { cymbal(t, 0.12); braam(bass - 12, t, sd * 16, 0.05); }
+      if (s === 0) choir([bass + 12, bass + 15, bass + 19], t, sd * 16, 0.014);
+      if (bar === 7 && s === 8) timpRoll(t, sd * 8, 0.32);
+    }
+    if (hot && s % 4 === 2) taiko(t, 0.16, false);
+  }
+
+  // ===== 보스: 홀스트 〈행성〉 '화성, 전쟁을 가져오는 자' (1914) — 5/4박자 =====
+  // 원곡의 5/4 오스티나토 리듬(따다다 딴 딴 따다 딴)과 G음 위의 불협화음을 살려 편곡 (브라스 선율은 재구성)
+  const MARS_R = [0, 2, 4, 6, 12, 18, 21, 24]; // 한 마디 30틱 (4분음표 = 6틱)
+  const MARS_MEL = phrase([[0, 67, 12], [12, 68, 12], [24, 70, 6], [30, 72, 18], [48, 73, 12],
+    [60, 74, 12], [72, 75, 12], [84, 77, 6], [90, 79, 24], [114, 78, 6]]);
+  const MARS_PEDAL = [[43, 50], [43, 50], [44, 51], [44, 49]];
+  function playBoss(sec, bar, s, t, sd) {
+    buildBuses();
+    const i4 = bar % 4, hit = MARS_R.includes(s), st = i4 * 30 + s;
+    const hot = intensity >= 0.45;
+    // 콜 레뇨 오스티나토 (활 나무로 현을 두드리는 메마른 소리) — G음
+    if (hit) {
+      spiccato(55, t, sec === 'C' ? 0.06 : 0.045, 1600);
+      spiccato(43, t, 0.05, 1000);
+      taiko(t, s === 0 ? 0.4 : 0.2, s === 0);
+    }
+    if (s === 0) sub(31, t, sd * 30, 0.12);
+    if (sec === 'A') {
+      if (s === 0) { horn(MARS_PEDAL[i4][0], t, sd * 30, 0.04); horn(MARS_PEDAL[i4][1], t, sd * 30, 0.03); }
+    } else if (sec === 'B') {
+      if (s === 0) strings([55, 61, 62], t, sd * 30, 0.012, true);   // G·D♭·D 긴장 화음 트레몰로
+      const m = MARS_MEL[st];
+      if (m) { horn(m[0], t, m[1] * sd, 0.055); horn(m[0] - 12, t, m[1] * sd, 0.04); }
+      if (s === 12 || s === 24) snareMil(t, 0.06);
+    } else { // C: 불협 합주가 리듬마다 내리꽂힘
+      if (hit) for (const n of [55, 61, 65, 68]) spiccato(n + 12, t, 0.03, 3500);
+      if (s === 0) { cymbal(t, 0.13); braam(31, t, sd * 30, 0.06); choir([55, 61, 65], t, sd * 30, 0.02); }
+      if (s === 6 || s === 18) anvil(t, 0.12);
+      if (i4 === 3 && s === 12) timpRoll(t, sd * 18, 0.34);
+    }
+    if (hot && s % 6 === 3) taiko(t, 0.15, false);
+  }
+
+  // div: 한 박의 세분 수, beats: 마디당 박 수, accel: 반복마다 빨라짐
   const TRACKS = {
-    title: { bpm: 88, sections: [['A', 8]], loopFrom: 0, play: playTitle },
-    stage: { bpm: 132, sections: [['intro', 4], ['build', 4], ['main', 8], ['climax', 8]], loopFrom: 1, play: playStage },
-    boss: { bpm: 148, sections: [['A', 4], ['B', 8]], loopFrom: 0, play: playBoss },
+    title: { bpm: 108, beats: 2, div: 4, sections: [['open', 8], ['dev', 16], ['tutti', 8]], loopFrom: 0, play: playTitle },
+    stage: { bpm: 120, beats: 4, div: 4, accel: { step: 12, max: 180 }, sections: [['A', 8], ['B', 8], ['C', 8]], loopFrom: 0, play: playStage },
+    boss: { bpm: 168, beats: 5, div: 6, sections: [['A', 4], ['B', 4], ['C', 4]], loopFrom: 0, play: playBoss },
   };
 
   // 사용자 음원 (music/list.json 에 파일 이름을 적으면 합성곡 대신 재생)
@@ -437,19 +479,24 @@
     }
     music.track = TRACKS[name] || null;
     music.step = 0;
+    music.loop = 0;
+    music.bpm = music.track ? music.track.bpm : 120;
     music.next = ctx ? ctx.currentTime + 0.08 : 0;
   }
 
+  // 반환: [구간 이름, 구간 안 마디, 마디 안 틱, 반복 횟수]
   function songPos(tr, step) {
-    let bar = Math.floor(step / 16);
+    const spb = (tr.beats || 4) * (tr.div || 4);
+    let bar = Math.floor(step / spb);
     const total = tr.sections.reduce((a, x) => a + x[1], 0);
     const head = tr.sections.slice(0, tr.loopFrom).reduce((a, x) => a + x[1], 0);
-    if (bar >= total) bar = head + ((bar - head) % (total - head));
+    let loop = 0;
+    if (bar >= total) { loop = 1 + Math.floor((bar - total) / (total - head)); bar = head + ((bar - head) % (total - head)); }
     for (const [name, len] of tr.sections) {
-      if (bar < len) return [name, bar];
+      if (bar < len) return [name, bar, step % spb, loop];
       bar -= len;
     }
-    return [tr.sections[0][0], 0];
+    return [tr.sections[0][0], 0, 0, loop];
   }
 
   // 매 프레임 호출: 0.15초 앞까지 음표를 미리 예약 (프레임이 흔들려도 박자가 일정)
@@ -458,13 +505,14 @@
     loadCustomMusic();
     const tr = music.track;
     if (!tr) return;
-    const sd = 60 / tr.bpm / 4;
     if (music.next < ctx.currentTime - 0.1) music.next = ctx.currentTime + 0.03; // 일시중단 후 복귀
     while (music.next < ctx.currentTime + 0.15) {
-      const [sec, bar] = songPos(tr, music.step);
-      try { tr.play(sec, bar, music.step % 16, music.next, sd); } catch (e) { if (!music.err) { music.err = true; console.error('music', e); } }
+      const [sec, bar, tick, loop] = songPos(tr, music.step);
+      if (tr.accel && loop > music.loop) { music.loop = loop; music.bpm = Math.min(tr.accel.max, music.bpm + tr.accel.step); }
+      const sd = 60 / music.bpm / (tr.div || 4);
+      try { tr.play(sec, bar, tick, music.next, sd); } catch (e) { if (!music.err) { music.err = true; console.error('music', e); } }
       music.step++;
-      if (music.step > 16 * 4096) music.step = 16 * 64;
+      if (music.step > 4000000) music.step = 0;
       music.next += sd;
     }
   }

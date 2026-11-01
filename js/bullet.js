@@ -64,14 +64,14 @@
     drawPlayer(ctx, list) {
       const glow = SS.FX.sprite('tracer');
       ctx.globalCompositeOperation = 'lighter';
-      for (const b of list) ctx.drawImage(glow, b.x - 6, b.y - 12, 12, 26);
+      for (const b of list) ctx.drawImage(glow, b.x - 8, b.y - 14, 16, 30);
       ctx.globalCompositeOperation = 'source-over';
       for (const b of list) {
         // 예광탄: 꼬리가 긴 노란 탄
         const gr = ctx.createLinearGradient(0, b.y - 8, 0, b.y + 14);
         gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.3, '#ffe14a'); gr.addColorStop(1, 'rgba(255,140,40,0)');
         ctx.fillStyle = gr;
-        ctx.fillRect(b.x - 1.2, b.y - 8, 2.4, 22);
+        ctx.fillRect(b.x - 1.8, b.y - 9, 3.6, 24); // 강화탄: 더 굵은 예광탄
       }
     },
 

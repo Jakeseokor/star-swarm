@@ -64,8 +64,8 @@
       this.delay = delay;
     }
 
-    hit() {
-      this.hp--;
+    hit(dmg) {
+      this.hp -= dmg || 1;
       if (this.hp > 0) {
         this.flash = 0.1;
         SS.Audio.play('hit');
@@ -106,7 +106,7 @@
         this.fireTimes.push(t);
         if (cfg.fireMode === 'barrage' || cfg.fireMode === 'spread3') {
           if (Math.random() < 0.6) this.fireTimes.push(t + 0.5);
-        }
+        } else if (Math.random() < (cfg.extraShot || 0)) this.fireTimes.push(t + 0.45); // 난이도: 연속 사격
       }
       if (loud) SS.Audio.play('dive');
     }
@@ -363,7 +363,7 @@
       this.y = this.homeY + Math.sin(this.t * spd * 2.1) * (this.phase === 3 ? 22 : 12);
 
       if (this.invuln > 0 || !game.player.alive) return;
-      this.firePatterns(dt, game);
+      this.firePatterns(dt * (C.BOSS.fireMul || 1), game);
     }
 
     firePatterns(dt, game) {
