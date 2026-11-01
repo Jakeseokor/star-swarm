@@ -404,44 +404,67 @@
     if (hot && s % 4 === 2) taiko(t, 0.16, false);
   }
 
-  // ===== 보스: 홀스트 〈행성〉 '화성, 전쟁을 가져오는 자' (1914) — 5/4박자 =====
-  // 원곡의 5/4 오스티나토 리듬(따다다 딴 딴 따다 딴)과 G음 위의 불협화음을 살려 편곡 (브라스 선율은 재구성)
-  const MARS_R = [0, 2, 4, 6, 12, 18, 21, 24]; // 한 마디 30틱 (4분음표 = 6틱)
-  const MARS_MEL = phrase([[0, 67, 12], [12, 68, 12], [24, 70, 6], [30, 72, 18], [48, 73, 12],
-    [60, 74, 12], [72, 75, 12], [84, 77, 6], [90, 79, 24], [114, 78, 6]]);
-  const MARS_PEDAL = [[43, 50], [43, 50], [44, 51], [44, 49]];
+  // ===== 보스: 비발디 〈사계〉 '여름' 3악장 Presto (1725) — g단조 3/4박자, 폭풍 =====
+  // 원곡의 반복음 트레몰로(같은 음을 16분음표로 몰아침)와 하강 음계 질주를 살려 편곡
+  //  storm: 반복음 → 하강 음계 / chords: 내리꽂는 화음 + 저음 질주 / run: 상승 아르페지오 / climax: 최강음 폭풍
+  const SU_STORM = [
+    [67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67, 67],      // G 반복음
+    [79, 77, 75, 74, 72, 70, 69, 67, 66, 67, 69, 70],      // 하강 음계 질주
+    [74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74, 74],      // D 반복음
+    [86, 84, 82, 81, 79, 77, 75, 74, 73, 74, 76, 78],      // 높은 곳에서 다시 질주
+  ];
+  const SU_CH = [[55, 58, 62], [50, 54, 57], [55, 58, 62], [50, 54, 57]];   // Gm – D – Gm – D
+  const SU_RUN = [
+    [67, 70, 74, 79, 70, 74, 79, 82, 74, 79, 82, 86],      // Gm
+    [72, 75, 79, 84, 75, 79, 84, 87, 79, 84, 87, 91],      // Cm
+    [74, 78, 81, 86, 78, 81, 86, 90, 81, 86, 90, 93],      // D
+    [79, 82, 86, 91, 86, 82, 79, 74, 70, 67, 62, 55],      // Gm → 급강하
+  ];
+  const SU_RUN_ROOT = [43, 48, 50, 43];
   function playBoss(sec, bar, s, t, sd) {
     buildBuses();
-    const i4 = bar % 4, hit = MARS_R.includes(s), st = i4 * 30 + s;
-    const hot = intensity >= 0.45;
-    // 콜 레뇨 오스티나토 (활 나무로 현을 두드리는 메마른 소리) — G음
-    if (hit) {
-      spiccato(55, t, sec === 'C' ? 0.06 : 0.045, 1600);
-      spiccato(43, t, 0.05, 1000);
-      taiko(t, s === 0 ? 0.4 : 0.2, s === 0);
+    const i4 = bar % 4, hot = intensity >= 0.45;
+    if (sec === 'storm' || sec === 'climax') {
+      const big = sec === 'climax';
+      const n = SU_STORM[i4][s];
+      spiccato(n, t, big ? 0.06 : 0.05, 3400);                    // 1바이올린
+      spiccato(n - 12, t, big ? 0.05 : 0.04, 2600);                // 2바이올린·비올라
+      if (s % 2 === 0) spiccato((i4 % 2 ? 50 : 43), t, 0.05, 1200); // 저음 현 8분음표
+      if (s === 0) { timpani(i4 % 2 ? 38 : 43, t, 0.3); sub(i4 % 2 ? 38 : 31, t, sd * 12, 0.12); }
+      if (s === 6) timpani(i4 % 2 ? 38 : 43, t, 0.2);
+      if (big) {
+        if (s === 0) { choir(SU_CH[i4].map((x) => x + 12), t, sd * 12, 0.02); horn(SU_CH[i4][0], t, sd * 12, 0.04); }
+        if (s === 0 && i4 === 0) { cymbal(t, 0.13); braam(31, t, sd * 24, 0.06); }
+        if (s % 4 === 0) taiko(t, s === 0 ? 0.42 : 0.24, s === 0);
+        if (i4 === 3 && s === 6) timpRoll(t, sd * 6, 0.32);
+      } else if (s === 0) strings(SU_CH[i4].map((x) => x + 12), t, sd * 12, 0.01, true);
+    } else if (sec === 'chords') {
+      const ch = SU_CH[i4];
+      if (s % 4 === 0) {                                            // 4분음표마다 내리꽂는 화음
+        for (const n of ch) { spiccato(n + 12, t, 0.04, 3200); spiccato(n + 24, t, 0.03, 3600); }
+        horn(ch[0], t, sd * 3, 0.045);
+        timpani(ch[0] - 12, t, s === 0 ? 0.32 : 0.2);
+        taiko(t, s === 0 ? 0.36 : 0.2, s === 0);
+      }
+      spiccato(ch[[0, 1, 2, 1][s % 4]] - 12, t, 0.05, 1600);         // 저음 16분음표 질주
+      if (s === 6) anvil(t, 0.1);
+    } else { // run: 상승 아르페지오
+      const n = SU_RUN[i4][s], root = SU_RUN_ROOT[i4];
+      spiccato(n, t, 0.055, 3600);
+      if (s % 3 === 0) spiccato(n - 12, t, 0.035, 2600);
+      if (s === 0) { pizz(root - 12, t, 0.07); timpani(root - 12, t, 0.26); strings([root, root + 7], t, sd * 12, 0.012, false); }
+      if (s === 6) pizz(root - 5, t, 0.05);
+      if (s % 2 === 1) snareMil(t, 0.02 + i4 * 0.01);
+      if (i4 === 3 && s === 0) riser(t, sd * 12, 0.07);
     }
-    if (s === 0) sub(31, t, sd * 30, 0.12);
-    if (sec === 'A') {
-      if (s === 0) { horn(MARS_PEDAL[i4][0], t, sd * 30, 0.04); horn(MARS_PEDAL[i4][1], t, sd * 30, 0.03); }
-    } else if (sec === 'B') {
-      if (s === 0) strings([55, 61, 62], t, sd * 30, 0.012, true);   // G·D♭·D 긴장 화음 트레몰로
-      const m = MARS_MEL[st];
-      if (m) { horn(m[0], t, m[1] * sd, 0.055); horn(m[0] - 12, t, m[1] * sd, 0.04); }
-      if (s === 12 || s === 24) snareMil(t, 0.06);
-    } else { // C: 불협 합주가 리듬마다 내리꽂힘
-      if (hit) for (const n of [55, 61, 65, 68]) spiccato(n + 12, t, 0.03, 3500);
-      if (s === 0) { cymbal(t, 0.13); braam(31, t, sd * 30, 0.06); choir([55, 61, 65], t, sd * 30, 0.02); }
-      if (s === 6 || s === 18) anvil(t, 0.12);
-      if (i4 === 3 && s === 12) timpRoll(t, sd * 18, 0.34);
-    }
-    if (hot && s % 6 === 3) taiko(t, 0.15, false);
+    if (hot && s % 3 === 0) taiko(t, 0.15, false);
   }
 
   // div: 한 박의 세분 수, beats: 마디당 박 수, accel: 반복마다 빨라짐
   const TRACKS = {
     title: { bpm: 108, beats: 2, div: 4, sections: [['open', 8], ['dev', 16], ['tutti', 8]], loopFrom: 0, play: playTitle },
     stage: { bpm: 120, beats: 4, div: 4, accel: { step: 12, max: 180 }, sections: [['A', 8], ['B', 8], ['C', 8]], loopFrom: 0, play: playStage },
-    boss: { bpm: 168, beats: 5, div: 6, sections: [['A', 4], ['B', 4], ['C', 4]], loopFrom: 0, play: playBoss },
+    boss: { bpm: 160, beats: 3, div: 4, sections: [['storm', 4], ['chords', 4], ['run', 4], ['climax', 4]], loopFrom: 0, play: playBoss },
   };
 
   // 사용자 음원 (music/list.json 에 파일 이름을 적으면 합성곡 대신 재생)
